@@ -193,7 +193,7 @@ fun DailyView(
                                 }
                             }
                             Text(
-                                text = "${AppDate.monthName(selectedDate.month)} ${selectedDate.day}, ${selectedDate.year}",
+                                text = selectedDate.formatEuropean(includeYear = true),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -412,16 +412,6 @@ fun DailyView(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = onAddTask,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.testTag("empty_add_task_button")
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Add Task")
-                        }
                     }
                 }
             }

@@ -285,7 +285,7 @@ fun TaskAddEditSheet(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "${AppDate.dayOfWeekName(startDate.dayOfWeek())}, ${AppDate.monthNameShort(startDate.month)} ${startDate.day}, ${startDate.year}",
+                                text = "${AppDate.dayOfWeekName(startDate.dayOfWeek())}, ${startDate.formatEuropean(includeYear = true)}",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -388,7 +388,7 @@ fun TaskAddEditSheet(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = "${AppDate.monthNameShort(startDate.month)} ${startDate.day}, ${startDate.year}",
+                                    text = startDate.formatEuropean(includeYear = true),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
@@ -441,7 +441,7 @@ fun TaskAddEditSheet(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        text = "${AppDate.monthNameShort(endDate.month)} ${endDate.day}, ${endDate.year}",
+                                        text = endDate.formatEuropean(includeYear = true),
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.SemiBold
                                     )

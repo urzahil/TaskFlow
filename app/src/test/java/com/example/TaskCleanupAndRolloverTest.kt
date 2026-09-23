@@ -96,4 +96,13 @@ class TaskCleanupAndRolloverTest {
         assertEquals("Wednesday", AppDate.dayOfWeekName(wednesday.dayOfWeek()))
         assertEquals(3, AppDate.dayOfWeekShort(wednesday.dayOfWeek()).length)
     }
+
+    @Test
+    fun testEuropeanDateFormat() {
+        val date = AppDate(2026, 9, 23)
+        assertEquals("23 September 2026", date.formatEuropean(includeYear = true))
+        assertEquals("23 September", date.formatEuropean(includeYear = false))
+        assertEquals("23 Sep 2026", date.formatEuropeanShort(includeYear = true))
+        assertEquals("23 Sep", date.formatEuropeanShort(includeYear = false))
+    }
 }

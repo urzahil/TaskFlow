@@ -308,7 +308,7 @@ fun MonthlyView(
                                 color = MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                text = "${AppDate.dayOfWeekShort(selectedDate.dayOfWeek())}, ${AppDate.monthNameShort(selectedDate.month)} ${selectedDate.day}",
+                                text = "${AppDate.dayOfWeekShort(selectedDate.dayOfWeek())}, ${selectedDate.day} ${AppDate.monthName(selectedDate.month)}",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -361,7 +361,7 @@ fun MonthlyView(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No tasks for ${AppDate.monthNameShort(selectedDate.month)} ${selectedDate.day}. Tap + Add to schedule a task or recurring routine.",
+                        text = "No tasks for ${selectedDate.day} ${AppDate.monthName(selectedDate.month)}. Tap + Add to schedule a task or recurring routine.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center

@@ -64,6 +64,14 @@ data class AppDate(
         return this.toEpochDay() - other.toEpochDay()
     }
 
+    fun formatEuropean(includeYear: Boolean = true): String {
+        return if (includeYear) "$day ${monthName(month)} $year" else "$day ${monthName(month)}"
+    }
+
+    fun formatEuropeanShort(includeYear: Boolean = true): String {
+        return if (includeYear) "$day ${monthNameShort(month)} $year" else "$day ${monthNameShort(month)}"
+    }
+
     override fun compareTo(other: AppDate): Int {
         val yCmp = year.compareTo(other.year)
         if (yCmp != 0) return yCmp
