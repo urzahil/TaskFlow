@@ -77,6 +77,13 @@ class TaskViewModel(
         _maintenanceMessage.value = null
     }
 
+    private val _showGoogleError10Dialog = MutableStateFlow(false)
+    val showGoogleError10Dialog: StateFlow<Boolean> = _showGoogleError10Dialog.asStateFlow()
+
+    fun setShowGoogleError10Dialog(show: Boolean) {
+        _showGoogleError10Dialog.value = show
+    }
+
     private val _driveSyncState = MutableStateFlow(
         DriveSyncState(
             isSignedIn = driveBackupManager.getSignedInAccount() != null,
@@ -305,6 +312,7 @@ class TaskViewModel(
     fun jumpToCurrentMonth() {
         val now = AppDate.today()
         _selectedYearMonth.value = Pair(now.year, now.month)
+        _selectedDate.value = now
     }
 
     fun setViewMode(mode: ViewMode) {
@@ -501,6 +509,33 @@ class TaskViewModel(
                 driveBackupManager.getGoogleSignInClient().signOut()
             } catch (_: Exception) {}
             refreshDriveState(message = "Disconnected from Google Drive")
+        }
+    }
+
+    suspend fun getBackupJsonString(): String {
+        val tasks = repository.allTasks.first()
+        val completions = repository.allCompletions.first()
+        return driveBackupManager.exportBackupJson(tasks, completions)
+    }
+
+    fun restoreFromJson(jsonString: String) {
+        viewModelScope.launch {
+            _driveSyncState.value = _driveSyncState.value.copy(isSyncing = true, syncMessage = null)
+            try {
+                val result = driveBackupManager.restoreFromJson(jsonString)
+                if (result.isSuccess) {
+                    val count = result.getOrThrow()
+                    refreshDriveState(
+                        message = "Restored $count tasks from backup file! 🎉",
+                        isError = false
+                    )
+                } else {
+                    val err = result.exceptionOrNull()?.message ?: "Invalid backup file"
+                    refreshDriveState(message = "Restore error: $err", isError = true)
+                }
+            } catch (e: Exception) {
+                refreshDriveState(message = "Restore failed: ${e.message}", isError = true)
+            }
         }
     }
 

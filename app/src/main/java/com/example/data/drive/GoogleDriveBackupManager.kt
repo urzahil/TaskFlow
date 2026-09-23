@@ -195,6 +195,29 @@ class GoogleDriveBackupManager(
     }
 
     /**
+     * Restores tasks from JSON string directly (for local backup import)
+     */
+    suspend fun restoreFromJson(json: String): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            val (tasks, completions) = parseBackupJson(json)
+            if (tasks.isNotEmpty()) {
+                repository.insertTasks(tasks)
+            }
+            if (completions.isNotEmpty()) {
+                repository.insertCompletions(completions)
+            }
+            prefs.edit()
+                .putLong(KEY_LAST_BACKUP_TIME, System.currentTimeMillis())
+                .putInt(KEY_LAST_BACKUP_COUNT, tasks.size)
+                .apply()
+            Result.success(tasks.size)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error restoring from JSON: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Checks if this is a fresh install and auto-restores tasks if a Google Drive backup is found
      */
     suspend fun checkAndAutoRestoreOnInstall(): Result<Int?> = withContext(Dispatchers.IO) {

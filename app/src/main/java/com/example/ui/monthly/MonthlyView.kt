@@ -276,22 +276,33 @@ fun MonthlyView(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .padding(end = 8.dp)
+                        ) {
                             Text(
                                 text = "Selected Day Overview",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "${AppDate.dayOfWeekShort(selectedDate.dayOfWeek())}, ${selectedDate.day} ${AppDate.monthName(selectedDate.month)}",
-                                style = MaterialTheme.typography.titleMedium,
+                                text = "${AppDate.dayOfWeekShort(selectedDate.dayOfWeek())}, ${selectedDate.day} ${AppDate.monthNameShort(selectedDate.month)}",
+                                style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             OutlinedButton(
                                 onClick = onSwitchToDailyView,
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),

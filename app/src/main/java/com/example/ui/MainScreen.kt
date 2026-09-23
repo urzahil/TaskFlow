@@ -45,15 +45,19 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.drive.GoogleOAuthHelper
 import com.example.data.model.AppDate
+import com.example.ui.components.GoogleError10Dialog
 import com.example.ui.components.TaskAddEditSheet
 import com.example.ui.daily.DailyView
 import com.example.ui.model.ViewMode
@@ -61,6 +65,9 @@ import com.example.ui.monthly.MonthlyView
 import com.example.ui.settings.SettingsScreen
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,6 +92,47 @@ fun MainScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var isSearchActive by remember { mutableStateOf(false) }
 
+    val showGoogleError10Dialog by viewModel.showGoogleError10Dialog.collectAsStateWithLifecycle()
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    val exportJsonLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    val json = viewModel.getBackupJsonString()
+                    context.contentResolver.openOutputStream(uri)?.use { os ->
+                        os.write(json.toByteArray(Charsets.UTF_8))
+                    }
+                    snackbarHostState.showSnackbar("Backup file saved successfully! 📁")
+                } catch (e: Exception) {
+                    snackbarHostState.showSnackbar("Failed to export backup: ${e.message}")
+                }
+            }
+        }
+    }
+
+    val importJsonLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    val json = context.contentResolver.openInputStream(uri)?.use { isStream ->
+                        isStream.bufferedReader().use { it.readText() }
+                    }
+                    if (json != null) {
+                        viewModel.restoreFromJson(json)
+                    }
+                } catch (e: Exception) {
+                    snackbarHostState.showSnackbar("Failed to read backup file: ${e.message}")
+                }
+            }
+        }
+    }
+
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -97,8 +145,20 @@ fun MainScreen(
                 viewModel.refreshDriveState("Google Sign-In was not completed", isError = true)
             }
         } catch (e: Exception) {
-            viewModel.refreshDriveState("Sign-In error: ${e.message}", isError = true)
+            val statusCode = (e as? ApiException)?.statusCode
+            if (statusCode == 10 || statusCode == CommonStatusCodes.DEVELOPER_ERROR) {
+                viewModel.setShowGoogleError10Dialog(true)
+                viewModel.refreshDriveState("Google Sign-In Error 10: OAuth Client ID setup required", isError = true)
+            } else {
+                viewModel.refreshDriveState("Sign-In error: ${e.message}", isError = true)
+            }
         }
+    }
+
+    if (showGoogleError10Dialog) {
+        GoogleError10Dialog(
+            onDismiss = { viewModel.setShowGoogleError10Dialog(false) }
+        )
     }
 
     LaunchedEffect(maintenanceMessage) {
@@ -152,6 +212,18 @@ fun MainScreen(
                                 Icon(
                                     Icons.Default.Today,
                                     contentDescription = "Jump to Today",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        if (viewMode == ViewMode.MONTHLY && (selectedYearMonth.first != AppDate.today().year || selectedYearMonth.second != AppDate.today().month)) {
+                            IconButton(
+                                onClick = { viewModel.jumpToCurrentMonth() },
+                                modifier = Modifier.testTag("jump_current_month_top_button")
+                            ) {
+                                Icon(
+                                    Icons.Default.Today,
+                                    contentDescription = "Jump to Current Month",
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                             }
@@ -341,6 +413,26 @@ fun MainScreen(
                         },
                         onSetAutoBackup = { enabled ->
                             viewModel.setAutoBackupEnabled(enabled)
+                        },
+                        onShowError10Info = {
+                            viewModel.setShowGoogleError10Dialog(true)
+                        },
+                        onExportJsonBackup = {
+                            exportJsonLauncher.launch("taskflow_backup_${selectedDate.toIsoString()}.json")
+                        },
+                        onImportJsonBackup = {
+                            importJsonLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
+                        },
+                        onShareJsonBackup = {
+                            coroutineScope.launch(Dispatchers.IO) {
+                                try {
+                                    val json = viewModel.getBackupJsonString()
+                                    val fileName = "taskflow_backup_${selectedDate.toIsoString()}.json"
+                                    GoogleOAuthHelper.shareBackupFile(context, json, fileName)
+                                } catch (e: Exception) {
+                                    snackbarHostState.showSnackbar("Failed to share backup: ${e.message}")
+                                }
+                            }
                         }
                     )
                 }
