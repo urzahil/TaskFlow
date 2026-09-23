@@ -1,5 +1,7 @@
 package com.example.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -57,6 +59,8 @@ import com.example.ui.daily.DailyView
 import com.example.ui.model.ViewMode
 import com.example.ui.monthly.MonthlyView
 import com.example.ui.settings.SettingsScreen
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.common.api.ApiException
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,14 +80,38 @@ fun MainScreen(
     val isAddEditSheetOpen by viewModel.isAddEditSheetOpen.collectAsStateWithLifecycle()
     val editingTask by viewModel.editingTask.collectAsStateWithLifecycle()
     val maintenanceMessage by viewModel.maintenanceMessage.collectAsStateWithLifecycle()
+    val driveSyncState by viewModel.driveSyncState.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var isSearchActive by remember { mutableStateOf(false) }
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        try {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            val account = task.getResult(ApiException::class.java)
+            if (account != null) {
+                viewModel.onGoogleSignInSuccess(account)
+            } else {
+                viewModel.refreshDriveState("Google Sign-In was not completed", isError = true)
+            }
+        } catch (e: Exception) {
+            viewModel.refreshDriveState("Sign-In error: ${e.message}", isError = true)
+        }
+    }
 
     LaunchedEffect(maintenanceMessage) {
         maintenanceMessage?.let { msg ->
             snackbarHostState.showSnackbar(msg)
             viewModel.dismissMaintenanceMessage()
+        }
+    }
+
+    LaunchedEffect(driveSyncState.syncMessage) {
+        driveSyncState.syncMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.dismissSyncMessage()
         }
     }
 
@@ -295,6 +323,24 @@ fun MainScreen(
                         },
                         onRunMaintenance = {
                             viewModel.runCleanupAndRollover()
+                        },
+                        driveSyncState = driveSyncState,
+                        onConnectDrive = {
+                            googleSignInLauncher.launch(
+                                viewModel.driveBackupManager.getGoogleSignInClient().signInIntent
+                            )
+                        },
+                        onDisconnectDrive = {
+                            viewModel.disconnectGoogleDrive()
+                        },
+                        onBackupToDrive = {
+                            viewModel.backupToDrive()
+                        },
+                        onRestoreFromDrive = {
+                            viewModel.restoreFromDrive()
+                        },
+                        onSetAutoBackup = { enabled ->
+                            viewModel.setAutoBackupEnabled(enabled)
                         }
                     )
                 }

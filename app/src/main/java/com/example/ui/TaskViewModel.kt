@@ -3,6 +3,7 @@ package com.example.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.data.drive.GoogleDriveBackupManager
 import com.example.data.model.AppDate
 import com.example.data.model.CategoryEntity
 import com.example.data.model.TaskEntity
@@ -11,6 +12,7 @@ import com.example.ui.model.DaySummaryUi
 import com.example.ui.model.TaskFilter
 import com.example.ui.model.TaskItemUi
 import com.example.ui.model.ViewMode
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +21,17 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+data class DriveSyncState(
+    val isSignedIn: Boolean = false,
+    val userEmail: String? = null,
+    val isSyncing: Boolean = false,
+    val lastBackupTimeFormatted: String? = null,
+    val lastBackupCount: Int = 0,
+    val autoBackupEnabled: Boolean = true,
+    val syncMessage: String? = null,
+    val isError: Boolean = false
+)
 
 data class DailyStats(
     val total: Int = 0,
@@ -29,7 +42,8 @@ data class DailyStats(
 }
 
 class TaskViewModel(
-    private val repository: TaskRepository
+    private val repository: TaskRepository,
+    val driveBackupManager: GoogleDriveBackupManager
 ) : ViewModel() {
 
     private val today = AppDate.today()
@@ -63,6 +77,21 @@ class TaskViewModel(
         _maintenanceMessage.value = null
     }
 
+    private val _driveSyncState = MutableStateFlow(
+        DriveSyncState(
+            isSignedIn = driveBackupManager.getSignedInAccount() != null,
+            userEmail = driveBackupManager.getSignedInAccount()?.email,
+            lastBackupTimeFormatted = driveBackupManager.getLastBackupTimeFormatted(),
+            lastBackupCount = driveBackupManager.getLastBackupCount(),
+            autoBackupEnabled = driveBackupManager.isAutoBackupEnabled()
+        )
+    )
+    val driveSyncState: StateFlow<DriveSyncState> = _driveSyncState.asStateFlow()
+
+    fun dismissSyncMessage() {
+        _driveSyncState.value = _driveSyncState.value.copy(syncMessage = null)
+    }
+
     val categories: StateFlow<List<CategoryEntity>> = repository.allCategories
         .stateIn(
             scope = viewModelScope,
@@ -76,10 +105,20 @@ class TaskViewModel(
             if (currentCategories.isEmpty()) {
                 repository.seedInitialCategoriesIfEmpty()
             }
-            val currentTasks = repository.allTasks.first()
-            if (currentTasks.isEmpty()) {
-                repository.seedInitialTasksIfEmpty()
+
+            // On app installation: auto-restore from Google Drive if a backup exists
+            val restoredResult = driveBackupManager.checkAndAutoRestoreOnInstall()
+            val restoredCount = restoredResult.getOrNull()
+            if (restoredCount != null && restoredCount > 0) {
+                _maintenanceMessage.value = "Restored $restoredCount tasks from Google Drive backup 🎉"
+            } else {
+                val currentTasks = repository.allTasks.first()
+                if (currentTasks.isEmpty()) {
+                    repository.seedInitialTasksIfEmpty()
+                }
             }
+            refreshDriveState()
+
             // Run startup task to clean old completed tasks and move uncompleted tasks to today
             runCleanupAndRollover()
         }
@@ -302,6 +341,7 @@ class TaskViewModel(
                 dateIso = taskItem.date.toIsoString(),
                 currentlyCompleted = taskItem.isCompleted
             )
+            triggerAutoBackup()
         }
     }
 
@@ -313,6 +353,7 @@ class TaskViewModel(
                 repository.updateTask(task)
             }
             closeAddEditDialog()
+            triggerAutoBackup()
         }
     }
 
@@ -322,6 +363,7 @@ class TaskViewModel(
             if (_editingTask.value?.id == task.id) {
                 closeAddEditDialog()
             }
+            triggerAutoBackup()
         }
     }
 
@@ -360,11 +402,116 @@ class TaskViewModel(
         }
     }
 
-    class Factory(private val repository: TaskRepository) : ViewModelProvider.Factory {
+    private fun triggerAutoBackup() {
+        if (!driveBackupManager.isAutoBackupEnabled()) return
+        if (driveBackupManager.getSignedInAccount() == null) return
+        viewModelScope.launch {
+            try {
+                val tasks = repository.allTasks.first()
+                val completions = repository.allCompletions.first()
+                driveBackupManager.backupToDrive(tasks, completions)
+                refreshDriveState()
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun refreshDriveState(message: String? = null, isError: Boolean = false) {
+        val account = driveBackupManager.getSignedInAccount()
+        _driveSyncState.value = DriveSyncState(
+            isSignedIn = account != null,
+            userEmail = account?.email,
+            isSyncing = false,
+            lastBackupTimeFormatted = driveBackupManager.getLastBackupTimeFormatted(),
+            lastBackupCount = driveBackupManager.getLastBackupCount(),
+            autoBackupEnabled = driveBackupManager.isAutoBackupEnabled(),
+            syncMessage = message,
+            isError = isError
+        )
+    }
+
+    fun backupToDrive() {
+        viewModelScope.launch {
+            _driveSyncState.value = _driveSyncState.value.copy(isSyncing = true, syncMessage = null)
+            try {
+                val tasks = repository.allTasks.first()
+                val completions = repository.allCompletions.first()
+                val result = driveBackupManager.backupToDrive(tasks, completions)
+                if (result.isSuccess) {
+                    refreshDriveState(
+                        message = "Backed up ${tasks.size} tasks to Google Drive successfully! ☁️",
+                        isError = false
+                    )
+                } else {
+                    val err = result.exceptionOrNull()?.message ?: "Backup failed"
+                    refreshDriveState(message = "Backup error: $err", isError = true)
+                }
+            } catch (e: Exception) {
+                refreshDriveState(message = "Backup failed: ${e.message}", isError = true)
+            }
+        }
+    }
+
+    fun restoreFromDrive() {
+        viewModelScope.launch {
+            _driveSyncState.value = _driveSyncState.value.copy(isSyncing = true, syncMessage = null)
+            try {
+                val result = driveBackupManager.restoreFromDrive()
+                if (result.isSuccess) {
+                    val count = result.getOrThrow()
+                    refreshDriveState(
+                        message = "Successfully restored $count tasks from Google Drive! 🎉",
+                        isError = false
+                    )
+                } else {
+                    val err = result.exceptionOrNull()?.message ?: "Restore failed"
+                    refreshDriveState(message = "Restore error: $err", isError = true)
+                }
+            } catch (e: Exception) {
+                refreshDriveState(message = "Restore failed: ${e.message}", isError = true)
+            }
+        }
+    }
+
+    fun setAutoBackupEnabled(enabled: Boolean) {
+        driveBackupManager.setAutoBackupEnabled(enabled)
+        refreshDriveState()
+    }
+
+    fun onGoogleSignInSuccess(account: GoogleSignInAccount) {
+        refreshDriveState(message = "Connected to Google Drive as ${account.email}")
+        // Check if fresh tasks can be auto-restored
+        viewModelScope.launch {
+            val currentTasks = repository.allTasks.first()
+            if (currentTasks.isEmpty()) {
+                val result = driveBackupManager.restoreFromDrive()
+                val count = result.getOrNull()
+                if (count != null && count > 0) {
+                    refreshDriveState(
+                        message = "Connected as ${account.email} and restored $count tasks from Drive! 🎉",
+                        isError = false
+                    )
+                }
+            }
+        }
+    }
+
+    fun disconnectGoogleDrive() {
+        viewModelScope.launch {
+            try {
+                driveBackupManager.getGoogleSignInClient().signOut()
+            } catch (_: Exception) {}
+            refreshDriveState(message = "Disconnected from Google Drive")
+        }
+    }
+
+    class Factory(
+        private val repository: TaskRepository,
+        private val driveBackupManager: GoogleDriveBackupManager
+    ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(TaskViewModel::class.java)) {
-                return TaskViewModel(repository) as T
+                return TaskViewModel(repository, driveBackupManager) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

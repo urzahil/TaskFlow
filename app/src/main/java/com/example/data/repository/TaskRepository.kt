@@ -18,6 +18,12 @@ class TaskRepository(private val taskDao: TaskDao) {
 
     suspend fun insertTask(task: TaskEntity): Long = taskDao.insertTask(task)
 
+    suspend fun insertTasks(tasks: List<TaskEntity>) = taskDao.insertTasks(tasks)
+
+    suspend fun insertCompletions(completions: List<TaskCompletionEntity>) = taskDao.insertCompletions(completions)
+
+    suspend fun getTaskCount(): Int = taskDao.getTaskCount()
+
     suspend fun updateTask(task: TaskEntity) = taskDao.updateTask(task)
 
     suspend fun deleteTask(task: TaskEntity) {

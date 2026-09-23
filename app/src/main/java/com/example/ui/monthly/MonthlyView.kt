@@ -28,7 +28,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
@@ -73,7 +72,7 @@ fun MonthlyView(
     onSelectDate: (AppDate) -> Unit,
     onPrevMonth: () -> Unit,
     onNextMonth: () -> Unit,
-    onJumpToCurrentMonth: () -> Unit,
+    onJumpToCurrentMonth: () -> Unit = {},
     onToggleTask: (TaskItemUi) -> Unit,
     onEditTask: (TaskEntity) -> Unit,
     onDeleteTask: (TaskEntity) -> Unit,
@@ -83,7 +82,6 @@ fun MonthlyView(
 ) {
     val (year, month) = yearMonth
     val today = remember { AppDate.today() }
-    val isCurrentMonth = today.year == year && today.month == month
 
     // Calculate calendar grid days: starting from Monday before 1st of month
     val calendarDays = remember(year, month) {
@@ -166,28 +164,6 @@ fun MonthlyView(
                                 Icons.AutoMirrored.Filled.ArrowForward,
                                 contentDescription = "Next Month"
                             )
-                        }
-                    }
-
-                    if (!isCurrentMonth) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 2.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            TextButton(
-                                onClick = onJumpToCurrentMonth,
-                                modifier = Modifier.testTag("jump_current_month_button")
-                            ) {
-                                Icon(
-                                    Icons.Default.CalendarToday,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Jump to This Month", fontSize = 13.sp)
-                            }
                         }
                     }
 

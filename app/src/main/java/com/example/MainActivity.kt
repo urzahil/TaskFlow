@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.example.data.db.AppDatabase
+import com.example.data.drive.GoogleDriveBackupManager
 import com.example.data.repository.TaskRepository
 import com.example.ui.MainScreen
 import com.example.ui.TaskViewModel
@@ -19,7 +20,8 @@ class MainActivity : ComponentActivity() {
     private val viewModel: TaskViewModel by viewModels {
         val database = AppDatabase.getInstance(applicationContext)
         val repository = TaskRepository(database.taskDao())
-        TaskViewModel.Factory(repository)
+        val driveBackupManager = GoogleDriveBackupManager(applicationContext, repository)
+        TaskViewModel.Factory(repository, driveBackupManager)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
