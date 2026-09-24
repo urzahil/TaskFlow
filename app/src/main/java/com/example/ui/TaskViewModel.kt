@@ -224,6 +224,34 @@ class TaskViewModel(
     )
 
     /**
+     * Number of open (uncompleted) tasks scheduled for today.
+     * Used for the dynamic app launcher icon:
+     * When 0, the launcher icon shows the completion tick.
+     * When > 0, the launcher icon shows the open task count badge.
+     */
+    val todayOpenTasksCount: StateFlow<Int> = combine(
+        repository.allTasks,
+        repository.allCompletions
+    ) { tasks, completions ->
+        val today = AppDate.today()
+        val todayIso = today.toIsoString()
+        val completedTaskIds = completions
+            .filter { it.date == todayIso }
+            .map { it.taskId }
+            .toSet()
+
+        val scheduledTasks = tasks.filter { task ->
+            repository.isTaskScheduledOnDate(task, today)
+        }
+
+        scheduledTasks.count { !completedTaskIds.contains(it.id) }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = 0
+    )
+
+    /**
      * Map of Date ISO string to DaySummaryUi for all days in the currently selected month.
      * Highlighting days with something scheduled!
      */

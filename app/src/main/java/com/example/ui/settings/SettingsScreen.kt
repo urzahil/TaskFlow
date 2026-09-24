@@ -1,8 +1,11 @@
 package com.example.ui.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,6 +66,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -79,6 +84,7 @@ fun SettingsScreen(
     onAddCategory: (name: String, colorHex: Long, iconName: String) -> Unit,
     onEditCategory: (oldName: String, newName: String, colorHex: Long, iconName: String, isDefault: Boolean) -> Unit,
     onDeleteCategory: (String) -> Unit,
+    onBack: () -> Unit = {},
     onRunMaintenance: () -> Unit = {},
     driveSyncState: DriveSyncState = DriveSyncState(),
     onConnectDrive: () -> Unit = {},
@@ -92,18 +98,59 @@ fun SettingsScreen(
     onShareJsonBackup: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    BackHandler(onBack = onBack)
+
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var categoryToEdit by remember { mutableStateOf<CategoryEntity?>(null) }
     var categoryToDelete by remember { mutableStateOf<CategoryEntity?>(null) }
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
 
-    LazyColumn(
+    val density = LocalDensity.current
+    val edgeThresholdPx = with(density) { 60.dp.toPx() }
+    val swipeDistanceThresholdPx = with(density) { 70.dp.toPx() }
+
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .testTag("settings_screen_container"),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .pointerInput(onBack) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val startX = down.position.x
+                    // Detect gestures starting from the left of the screen
+                    if (startX <= edgeThresholdPx) {
+                        var totalDeltaX = 0f
+                        var totalDeltaY = 0f
+                        var triggered = false
+
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+
+                            val dx = change.position.x - change.previousPosition.x
+                            val dy = change.position.y - change.previousPosition.y
+                            totalDeltaX += dx
+                            totalDeltaY += kotlin.math.abs(dy)
+
+                            // Check if swiped rightwards from the left edge
+                            if (!triggered && totalDeltaX > swipeDistanceThresholdPx && totalDeltaX > totalDeltaY * 1.2f) {
+                                triggered = true
+                                change.consume()
+                                onBack()
+                                break
+                            }
+                        }
+                    }
+                }
+            }
     ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("settings_screen_container"),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
         // Section: Category Management Header
         item {
             Card(
@@ -791,13 +838,14 @@ fun SettingsScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "TaskFlow • Version 2.1",
+                    text = "TaskFlow • Version 2.2",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
+    }
     }
 
     // Add Category Dialog

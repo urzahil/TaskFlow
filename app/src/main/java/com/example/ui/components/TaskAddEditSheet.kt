@@ -54,6 +54,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -62,8 +63,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -73,6 +77,7 @@ import com.example.data.model.AppDate
 import com.example.data.model.CategoryEntity
 import com.example.data.model.TaskEntity
 import com.example.ui.model.CategoryIcons
+import kotlinx.coroutines.delay
 import java.util.Calendar
 
 data class CategoryOption(
@@ -111,6 +116,25 @@ fun TaskAddEditSheet(
     onDelete: ((TaskEntity) -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val titleFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(existingTask) {
+        if (existingTask == null) {
+            // Automatically focus the title input and show keyboard when adding a new task
+            delay(250)
+            try {
+                titleFocusRequester.requestFocus()
+                keyboardController?.show()
+            } catch (_: Exception) {
+                delay(150)
+                try {
+                    titleFocusRequester.requestFocus()
+                    keyboardController?.show()
+                } catch (_: Exception) {}
+            }
+        }
+    }
 
     // Derived category options from availableCategories or fallback
     val categoryOptions = remember(availableCategories) {
@@ -210,6 +234,7 @@ fun TaskAddEditSheet(
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .focusRequester(titleFocusRequester)
                     .testTag("task_title_input"),
                 shape = RoundedCornerShape(12.dp)
             )

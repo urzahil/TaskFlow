@@ -46,12 +46,13 @@
     <path
         android:fillColor="#CBD5E1"
         android:pathData="M48,71 h14 c0.83,0 1.5,0.67 1.5,1.5 s-0.67,1.5 -1.5,1.5 h-14 c-0.83,0 -1.5,-0.67 -1.5,-1.5 s0.67,-1.5 1.5,-1.5 z" />
-
-    <!-- Big Prominent Checkmark Badge on Bottom Right -->
+    <!-- Prominent Checkmark Badge shifted inward for circular launcher icons -->
     <path
         android:fillColor="#10B981"
-        android:pathData="M72,74 c0,-6.63 5.37,-12 12,-12 s12,5.37 12,12 -5.37,12 -12,12 -12,-5.37 -12,-12 z" />
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.4"
+        android:pathData="M62,72 c0,-6.63 5.37,-12 12,-12 s12,5.37 12,12 -5.37,12 -12,12 -12,-5.37 -12,-12 z" />
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M81.5,77.5 l-3.5,-3.5 c-0.58,-0.58 -1.53,-0.58 -2.11,0 -0.58,0.58 -0.58,1.53 0,2.11 l4.55,4.55 c0.58,0.58 1.53,0.58 2.11,0 l8.55,-8.55 c0.58,-0.58 0.58,-1.53 0,-2.11 -0.58,-0.58 -1.53,-0.58 -2.11,0 z" />
+        android:pathData="M71.5,75.5 l-3.5,-3.5 c-0.58,-0.58 -1.53,-0.58 -2.11,0 -0.58,0.58 -0.58,1.53 0,2.11 l4.55,4.55 c0.58,0.58 1.53,0.58 2.11,0 l8.55,-8.55 c0.58,-0.58 0.58,-1.53 0,-2.11 -0.58,-0.58 -1.53,-0.58 -2.11,0 z" />
 </vector>

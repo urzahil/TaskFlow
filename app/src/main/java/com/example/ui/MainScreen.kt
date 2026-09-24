@@ -1,5 +1,6 @@
 package com.example.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -173,6 +174,20 @@ fun MainScreen(
             snackbarHostState.showSnackbar(msg)
             viewModel.dismissSyncMessage()
         }
+    }
+
+    // Handle back gestures / system back button
+    BackHandler(enabled = isSearchActive) {
+        isSearchActive = false
+        viewModel.setSearchQuery("")
+    }
+
+    BackHandler(enabled = !isSearchActive && viewMode == ViewMode.SETTINGS) {
+        viewModel.setViewMode(ViewMode.DAILY)
+    }
+
+    BackHandler(enabled = !isSearchActive && viewMode == ViewMode.MONTHLY) {
+        viewModel.setViewMode(ViewMode.DAILY)
     }
 
     Scaffold(
@@ -384,6 +399,7 @@ fun MainScreen(
                 ViewMode.SETTINGS -> {
                     SettingsScreen(
                         categories = categories,
+                        onBack = { viewModel.setViewMode(ViewMode.DAILY) },
                         onAddCategory = { name, colorHex, iconName ->
                             viewModel.addCategory(name, colorHex, iconName)
                         },
