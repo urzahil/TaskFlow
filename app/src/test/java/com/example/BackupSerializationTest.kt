@@ -8,6 +8,8 @@ import com.example.data.model.CategoryEntity
 import com.example.data.model.TaskCompletionEntity
 import com.example.data.model.TaskEntity
 import com.example.data.repository.TaskRepository
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -22,12 +24,13 @@ import org.robolectric.annotation.Config
 class BackupSerializationTest {
 
     private lateinit var backupManager: GoogleDriveBackupManager
+    private lateinit var repository: TaskRepository
 
     @Before
     fun setup() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val db = AppDatabase.getInstance(context)
-        val repository = TaskRepository(db.taskDao())
+        repository = TaskRepository(db.taskDao())
         backupManager = GoogleDriveBackupManager(context, repository)
     }
 
@@ -86,7 +89,7 @@ class BackupSerializationTest {
     }
 
     @Test
-    fun testParseLegacyBackupWithoutCategories() {
+    fun testParseLegacyBackupWithoutCategoriesExtractsTaskCategories() {
         val legacyJson = """
             {
                 "version": 1,
@@ -113,6 +116,52 @@ class BackupSerializationTest {
         val parsed = backupManager.parseBackupJson(legacyJson)
         assertEquals(1, parsed.tasks.size)
         assertEquals("Legacy Task", parsed.tasks[0].title)
-        assertTrue(parsed.categories.isEmpty())
+        // Backward compatibility: extracts category from tasks and ensures default
+        assertEquals(1, parsed.categories.size)
+        assertEquals("Work", parsed.categories[0].name)
+        assertTrue(parsed.categories[0].isDefault)
+    }
+
+    @Test
+    fun testClearAndRestoreAllRemovesDefaultCategoriesAndSampleTasks() = runBlocking {
+        // Seed default categories and sample tasks
+        repository.seedInitialCategoriesIfEmpty()
+        repository.seedInitialTasksIfEmpty()
+
+        val initialCats = repository.allCategories.first()
+        assertTrue(initialCats.size >= 7)
+        val initialTasks = repository.allTasks.first()
+        assertTrue(initialTasks.isNotEmpty())
+
+        // Perform clear and restore with only custom backup data
+        val restoredCategories = listOf(
+            CategoryEntity(name = "ClientProjects", colorHex = 0xFFEF4444, iconName = "work", isDefault = true),
+            CategoryEntity(name = "PersonalGrowth", colorHex = 0xFF8B5CF6, iconName = "study", isDefault = false)
+        )
+        val restoredTasks = listOf(
+            TaskEntity(
+                id = 100L,
+                title = "Restored User Task",
+                category = "ClientProjects",
+                colorHex = 0xFFEF4444,
+                startDate = "2026-09-24"
+            )
+        )
+
+        repository.clearAndRestoreAll(restoredTasks, emptyList(), restoredCategories)
+
+        val finalCats = repository.allCategories.first()
+        assertEquals(2, finalCats.size)
+        assertTrue(finalCats.any { it.name == "ClientProjects" })
+        assertTrue(finalCats.any { it.name == "PersonalGrowth" })
+        // Default categories like Fitness, Health, Home, etc. must not exist
+        assertFalse(finalCats.any { it.name == "Fitness" })
+        assertFalse(finalCats.any { it.name == "Health" })
+
+        val finalTasks = repository.allTasks.first()
+        assertEquals(1, finalTasks.size)
+        assertEquals("Restored User Task", finalTasks[0].title)
+        // Sample tasks like "Morning hydration & vitamins" must be gone
+        assertFalse(finalTasks.any { it.title.contains("hydration") })
     }
 }

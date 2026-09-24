@@ -98,11 +98,7 @@ val CATEGORIES = listOf(
 
 val RECURRENCE_PRESETS = listOf(
     1 to "Every Day",
-    2 to "Every 2 Days",
-    3 to "Every 3 Days",
-    7 to "Weekly (7d)",
-    14 to "Every 2 Wks",
-    30 to "Monthly (30d)"
+    7 to "Every Week"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -229,7 +225,7 @@ fun TaskAddEditSheet(
                 value = title,
                 onValueChange = { title = it },
                 label = { Text("Task Title *") },
-                placeholder = { Text("e.g. Morning Walk, Water Plants, Report") },
+                placeholder = { Text("e.g. Morning Walk, Water Plants") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 modifier = Modifier

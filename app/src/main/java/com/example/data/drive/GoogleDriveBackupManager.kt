@@ -8,6 +8,7 @@ import com.example.data.model.CategoryEntity
 import com.example.data.model.TaskCompletionEntity
 import com.example.data.model.TaskEntity
 import com.example.data.repository.TaskRepository
+import com.example.ui.model.CategoryIcons
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -165,7 +166,7 @@ class GoogleDriveBackupManager(
         }
 
         val categoriesArray = root.optJSONArray("categories")
-        if (categoriesArray != null) {
+        if (categoriesArray != null && categoriesArray.length() > 0) {
             for (i in 0 until categoriesArray.length()) {
                 val obj = categoriesArray.getJSONObject(i)
                 val name = obj.optString("name", "").trim()
@@ -178,6 +179,37 @@ class GoogleDriveBackupManager(
                     )
                     categories.add(cat)
                 }
+            }
+        }
+
+        // Also check tasks for any categories (e.g. backward compatibility for backups without 'categories'
+        // or tasks having custom categories that were not in the categories array)
+        val existingNames = categories.map { it.name.lowercase().trim() }.toMutableSet()
+        for (task in tasks) {
+            val catName = task.category.trim()
+            if (catName.isNotEmpty() && !existingNames.contains(catName.lowercase())) {
+                existingNames.add(catName.lowercase())
+                categories.add(
+                    CategoryEntity(
+                        name = catName,
+                        colorHex = task.colorHex,
+                        iconName = CategoryIcons.suggestIconForName(catName),
+                        isDefault = (catName.equals("General", ignoreCase = true))
+                    )
+                )
+            }
+        }
+
+        // Ensure at least one category exists and at least one is default
+        if (categories.isEmpty()) {
+            categories.add(CategoryEntity("General", 0xFF3B82F6, "general", isDefault = true))
+        } else {
+            val hasDefault = categories.any { it.isDefault }
+            if (!hasDefault) {
+                val generalIndex = categories.indexOfFirst { it.name.equals("General", ignoreCase = true) }
+                val targetIndex = if (generalIndex >= 0) generalIndex else 0
+                val target = categories[targetIndex]
+                categories[targetIndex] = target.copy(isDefault = true)
             }
         }
 
@@ -204,7 +236,8 @@ class GoogleDriveBackupManager(
     }
 
     /**
-     * Restores tasks and custom categories from Google Drive into Room database
+     * Restores tasks and custom categories from Google Drive into Room database.
+     * Clears existing default categories and sample tasks so only backup data remains.
      */
     suspend fun restoreFromDrive(): Result<Int> = withContext(Dispatchers.IO) {
         val downloadResult = driveService.downloadBackup()
@@ -217,15 +250,11 @@ class GoogleDriveBackupManager(
         try {
             val json = downloadResult.getOrThrow()
             val parsed = parseBackupJson(json)
-            if (parsed.categories.isNotEmpty()) {
-                repository.insertCategories(parsed.categories)
-            }
-            if (parsed.tasks.isNotEmpty()) {
-                repository.insertTasks(parsed.tasks)
-            }
-            if (parsed.completions.isNotEmpty()) {
-                repository.insertCompletions(parsed.completions)
-            }
+            repository.clearAndRestoreAll(
+                tasks = parsed.tasks,
+                completions = parsed.completions,
+                categories = parsed.categories
+            )
             prefs.edit()
                 .putLong(KEY_LAST_BACKUP_TIME, System.currentTimeMillis())
                 .putInt(KEY_LAST_BACKUP_COUNT, parsed.tasks.size)
@@ -240,20 +269,17 @@ class GoogleDriveBackupManager(
     }
 
     /**
-     * Restores tasks and categories from JSON string directly (for local backup import)
+     * Restores tasks and categories from JSON string directly (for local backup import).
+     * Clears existing default categories and sample tasks so only backup data remains.
      */
     suspend fun restoreFromJson(json: String): Result<Int> = withContext(Dispatchers.IO) {
         try {
             val parsed = parseBackupJson(json)
-            if (parsed.categories.isNotEmpty()) {
-                repository.insertCategories(parsed.categories)
-            }
-            if (parsed.tasks.isNotEmpty()) {
-                repository.insertTasks(parsed.tasks)
-            }
-            if (parsed.completions.isNotEmpty()) {
-                repository.insertCompletions(parsed.completions)
-            }
+            repository.clearAndRestoreAll(
+                tasks = parsed.tasks,
+                completions = parsed.completions,
+                categories = parsed.categories
+            )
             prefs.edit()
                 .putLong(KEY_LAST_BACKUP_TIME, System.currentTimeMillis())
                 .putInt(KEY_LAST_BACKUP_COUNT, parsed.tasks.size)

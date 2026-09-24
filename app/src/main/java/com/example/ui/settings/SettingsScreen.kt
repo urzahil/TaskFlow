@@ -918,10 +918,10 @@ fun SettingsScreen(
                     tint = MaterialTheme.colorScheme.primary
                 )
             },
-            title = { Text("Restore Tasks from Drive") },
+            title = { Text("Restore from Drive") },
             text = {
                 Text(
-                    "This will restore all tasks and completed dates from your Google Drive backup into TaskFlow. Existing tasks will not be deleted."
+                    "This will restore all tasks, categories, and completion history from your Google Drive backup. Current tasks and default categories will be replaced with your backup data."
                 )
             },
             confirmButton = {

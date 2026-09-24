@@ -59,4 +59,27 @@ object CategoryIcons {
     fun getIcon(iconName: String): ImageVector {
         return AVAILABLE_ICONS.firstOrNull { it.first == iconName }?.second ?: Icons.Default.Bookmark
     }
+
+    fun suggestIconForName(categoryName: String): String {
+        val lower = categoryName.lowercase().trim()
+        return when {
+            lower.contains("work") || lower.contains("job") || lower.contains("office") -> "work"
+            lower.contains("person") || lower.contains("me") || lower.contains("self") -> "personal"
+            lower.contains("health") || lower.contains("med") || lower.contains("doctor") || lower.contains("spa") -> "health"
+            lower.contains("fit") || lower.contains("gym") || lower.contains("workout") || lower.contains("sport") -> "fitness"
+            lower.contains("home") || lower.contains("house") || lower.contains("chores") -> "home"
+            lower.contains("study") || lower.contains("learn") || lower.contains("school") || lower.contains("book") -> "study"
+            lower.contains("shop") || lower.contains("buy") || lower.contains("grocery") -> "shopping"
+            lower.contains("money") || lower.contains("finance") || lower.contains("bank") || lower.contains("bill") -> "finance"
+            lower.contains("travel") || lower.contains("trip") || lower.contains("flight") || lower.contains("vacation") -> "travel"
+            lower.contains("pet") || lower.contains("dog") || lower.contains("cat") -> "pets"
+            lower.contains("art") || lower.contains("design") || lower.contains("create") -> "creative"
+            lower.contains("music") || lower.contains("song") -> "music"
+            lower.contains("urgent") || lower.contains("goal") || lower.contains("flag") -> "flag"
+            lower.contains("star") || lower.contains("important") -> "star"
+            lower.contains("heart") || lower.contains("love") -> "heart"
+            lower.contains("idea") -> "idea"
+            else -> "general"
+        }
+    }
 }

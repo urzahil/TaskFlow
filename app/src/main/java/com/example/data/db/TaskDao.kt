@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import com.example.data.model.CategoryEntity
 import com.example.data.model.TaskCompletionEntity
@@ -93,4 +94,33 @@ interface TaskDao {
 
     @Query("DELETE FROM task_completions WHERE taskId NOT IN (SELECT id FROM tasks)")
     suspend fun cleanOrphanCompletions()
+
+    @Query("DELETE FROM tasks")
+    suspend fun deleteAllTasks()
+
+    @Query("DELETE FROM task_completions")
+    suspend fun deleteAllCompletions()
+
+    @Query("DELETE FROM categories")
+    suspend fun deleteAllCategories()
+
+    @Transaction
+    suspend fun clearAndRestoreAll(
+        tasks: List<TaskEntity>,
+        completions: List<TaskCompletionEntity>,
+        categories: List<CategoryEntity>
+    ) {
+        deleteAllTasks()
+        deleteAllCompletions()
+        deleteAllCategories()
+        if (categories.isNotEmpty()) {
+            insertCategories(categories)
+        }
+        if (tasks.isNotEmpty()) {
+            insertTasks(tasks)
+        }
+        if (completions.isNotEmpty()) {
+            insertCompletions(completions)
+        }
+    }
 }
