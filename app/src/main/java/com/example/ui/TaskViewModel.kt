@@ -224,34 +224,6 @@ class TaskViewModel(
     )
 
     /**
-     * Number of open (uncompleted) tasks scheduled for today.
-     * Used for the dynamic app launcher icon:
-     * When 0, the launcher icon shows the completion tick.
-     * When > 0, the launcher icon shows the open task count badge.
-     */
-    val todayOpenTasksCount: StateFlow<Int> = combine(
-        repository.allTasks,
-        repository.allCompletions
-    ) { tasks, completions ->
-        val today = AppDate.today()
-        val todayIso = today.toIsoString()
-        val completedTaskIds = completions
-            .filter { it.date == todayIso }
-            .map { it.taskId }
-            .toSet()
-
-        val scheduledTasks = tasks.filter { task ->
-            repository.isTaskScheduledOnDate(task, today)
-        }
-
-        scheduledTasks.count { !completedTaskIds.contains(it.id) }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.Eagerly,
-        initialValue = 0
-    )
-
-    /**
      * Map of Date ISO string to DaySummaryUi for all days in the currently selected month.
      * Highlighting days with something scheduled!
      */
@@ -415,12 +387,14 @@ class TaskViewModel(
                     isDefault = false
                 )
             )
+            triggerAutoBackup()
         }
     }
 
     fun deleteCategory(categoryName: String) {
         viewModelScope.launch {
             repository.deleteCategory(categoryName)
+            triggerAutoBackup()
         }
     }
 
@@ -435,6 +409,7 @@ class TaskViewModel(
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
             repository.updateCategory(oldName, trimmed, colorHex, iconName, isDefault)
+            triggerAutoBackup()
         }
     }
 
@@ -445,7 +420,8 @@ class TaskViewModel(
             try {
                 val tasks = repository.allTasks.first()
                 val completions = repository.allCompletions.first()
-                driveBackupManager.backupToDrive(tasks, completions)
+                val categories = repository.allCategories.first()
+                driveBackupManager.backupToDrive(tasks, completions, categories)
                 refreshDriveState()
             } catch (_: Exception) {}
         }
@@ -471,10 +447,11 @@ class TaskViewModel(
             try {
                 val tasks = repository.allTasks.first()
                 val completions = repository.allCompletions.first()
-                val result = driveBackupManager.backupToDrive(tasks, completions)
+                val categories = repository.allCategories.first()
+                val result = driveBackupManager.backupToDrive(tasks, completions, categories)
                 if (result.isSuccess) {
                     refreshDriveState(
-                        message = "Backed up ${tasks.size} tasks to Google Drive successfully! ☁️",
+                        message = "Backed up ${tasks.size} tasks & ${categories.size} categories to Google Drive! ☁️",
                         isError = false
                     )
                 } else {
@@ -495,7 +472,7 @@ class TaskViewModel(
                 if (result.isSuccess) {
                     val count = result.getOrThrow()
                     refreshDriveState(
-                        message = "Successfully restored $count tasks from Google Drive! 🎉",
+                        message = "Successfully restored $count tasks & categories from Google Drive! 🎉",
                         isError = false
                     )
                 } else {
@@ -543,7 +520,8 @@ class TaskViewModel(
     suspend fun getBackupJsonString(): String {
         val tasks = repository.allTasks.first()
         val completions = repository.allCompletions.first()
-        return driveBackupManager.exportBackupJson(tasks, completions)
+        val categories = repository.allCategories.first()
+        return driveBackupManager.exportBackupJson(tasks, completions, categories)
     }
 
     fun restoreFromJson(jsonString: String) {
@@ -554,7 +532,7 @@ class TaskViewModel(
                 if (result.isSuccess) {
                     val count = result.getOrThrow()
                     refreshDriveState(
-                        message = "Restored $count tasks from backup file! 🎉",
+                        message = "Restored $count tasks & categories from backup file! 🎉",
                         isError = false
                     )
                 } else {

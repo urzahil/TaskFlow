@@ -38,6 +38,8 @@ class TaskRepository(private val taskDao: TaskDao) {
 
     suspend fun insertCategory(category: CategoryEntity) = taskDao.insertCategory(category)
 
+    suspend fun insertCategories(categories: List<CategoryEntity>) = taskDao.insertCategories(categories)
+
     suspend fun updateCategory(
         oldName: String,
         newName: String,

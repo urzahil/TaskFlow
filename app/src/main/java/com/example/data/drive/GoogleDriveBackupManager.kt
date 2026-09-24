@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import com.example.data.model.AppDate
+import com.example.data.model.CategoryEntity
 import com.example.data.model.TaskCompletionEntity
 import com.example.data.model.TaskEntity
 import com.example.data.repository.TaskRepository
@@ -14,6 +15,12 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+data class ParsedBackup(
+    val tasks: List<TaskEntity>,
+    val completions: List<TaskCompletionEntity>,
+    val categories: List<CategoryEntity> = emptyList()
+)
 
 class GoogleDriveBackupManager(
     private val context: Context,
@@ -56,9 +63,13 @@ class GoogleDriveBackupManager(
     }
 
     /**
-     * Serializes tasks and completions to JSON string
+     * Serializes tasks, completions, and categories to JSON string
      */
-    fun exportBackupJson(tasks: List<TaskEntity>, completions: List<TaskCompletionEntity>): String {
+    fun exportBackupJson(
+        tasks: List<TaskEntity>,
+        completions: List<TaskCompletionEntity>,
+        categories: List<CategoryEntity> = emptyList()
+    ): String {
         val root = JSONObject()
         root.put("version", 2)
         root.put("app", "TaskFlow")
@@ -94,16 +105,29 @@ class GoogleDriveBackupManager(
         }
         root.put("completions", completionsArray)
 
+        val categoriesArray = JSONArray()
+        categories.forEach { cat ->
+            val catObj = JSONObject().apply {
+                put("name", cat.name)
+                put("colorHex", cat.colorHex)
+                put("iconName", cat.iconName)
+                put("isDefault", cat.isDefault)
+            }
+            categoriesArray.put(catObj)
+        }
+        root.put("categories", categoriesArray)
+
         return root.toString(2)
     }
 
     /**
-     * Deserializes JSON string to tasks and completions
+     * Deserializes JSON string to tasks, completions, and custom categories
      */
-    fun parseBackupJson(jsonString: String): Pair<List<TaskEntity>, List<TaskCompletionEntity>> {
+    fun parseBackupJson(jsonString: String): ParsedBackup {
         val root = JSONObject(jsonString)
         val tasks = mutableListOf<TaskEntity>()
         val completions = mutableListOf<TaskCompletionEntity>()
+        val categories = mutableListOf<CategoryEntity>()
 
         val tasksArray = root.optJSONArray("tasks")
         if (tasksArray != null) {
@@ -140,17 +164,35 @@ class GoogleDriveBackupManager(
             }
         }
 
-        return Pair(tasks, completions)
+        val categoriesArray = root.optJSONArray("categories")
+        if (categoriesArray != null) {
+            for (i in 0 until categoriesArray.length()) {
+                val obj = categoriesArray.getJSONObject(i)
+                val name = obj.optString("name", "").trim()
+                if (name.isNotEmpty()) {
+                    val cat = CategoryEntity(
+                        name = name,
+                        colorHex = obj.optLong("colorHex", 0xFF3B82F6),
+                        iconName = obj.optString("iconName", "general"),
+                        isDefault = obj.optBoolean("isDefault", false)
+                    )
+                    categories.add(cat)
+                }
+            }
+        }
+
+        return ParsedBackup(tasks, completions, categories)
     }
 
     /**
-     * Backs up tasks to Google Drive
+     * Backs up tasks and categories to Google Drive
      */
     suspend fun backupToDrive(
         tasks: List<TaskEntity>,
-        completions: List<TaskCompletionEntity>
+        completions: List<TaskCompletionEntity>,
+        categories: List<CategoryEntity> = emptyList()
     ): Result<DriveBackupInfo> = withContext(Dispatchers.IO) {
-        val json = exportBackupJson(tasks, completions)
+        val json = exportBackupJson(tasks, completions, categories)
         val result = driveService.uploadBackup(json)
         result.onSuccess { info ->
             prefs.edit()
@@ -162,7 +204,7 @@ class GoogleDriveBackupManager(
     }
 
     /**
-     * Restores tasks from Google Drive into Room database
+     * Restores tasks and custom categories from Google Drive into Room database
      */
     suspend fun restoreFromDrive(): Result<Int> = withContext(Dispatchers.IO) {
         val downloadResult = driveService.downloadBackup()
@@ -174,20 +216,23 @@ class GoogleDriveBackupManager(
 
         try {
             val json = downloadResult.getOrThrow()
-            val (tasks, completions) = parseBackupJson(json)
-            if (tasks.isNotEmpty()) {
-                repository.insertTasks(tasks)
+            val parsed = parseBackupJson(json)
+            if (parsed.categories.isNotEmpty()) {
+                repository.insertCategories(parsed.categories)
             }
-            if (completions.isNotEmpty()) {
-                repository.insertCompletions(completions)
+            if (parsed.tasks.isNotEmpty()) {
+                repository.insertTasks(parsed.tasks)
+            }
+            if (parsed.completions.isNotEmpty()) {
+                repository.insertCompletions(parsed.completions)
             }
             prefs.edit()
                 .putLong(KEY_LAST_BACKUP_TIME, System.currentTimeMillis())
-                .putInt(KEY_LAST_BACKUP_COUNT, tasks.size)
+                .putInt(KEY_LAST_BACKUP_COUNT, parsed.tasks.size)
                 .putBoolean(KEY_HAS_CHECKED_INSTALL_RESTORE, true)
                 .apply()
 
-            Result.success(tasks.size)
+            Result.success(parsed.tasks.size)
         } catch (e: Exception) {
             Log.e(TAG, "Error restoring backup: ${e.message}", e)
             Result.failure(e)
@@ -195,22 +240,25 @@ class GoogleDriveBackupManager(
     }
 
     /**
-     * Restores tasks from JSON string directly (for local backup import)
+     * Restores tasks and categories from JSON string directly (for local backup import)
      */
     suspend fun restoreFromJson(json: String): Result<Int> = withContext(Dispatchers.IO) {
         try {
-            val (tasks, completions) = parseBackupJson(json)
-            if (tasks.isNotEmpty()) {
-                repository.insertTasks(tasks)
+            val parsed = parseBackupJson(json)
+            if (parsed.categories.isNotEmpty()) {
+                repository.insertCategories(parsed.categories)
             }
-            if (completions.isNotEmpty()) {
-                repository.insertCompletions(completions)
+            if (parsed.tasks.isNotEmpty()) {
+                repository.insertTasks(parsed.tasks)
+            }
+            if (parsed.completions.isNotEmpty()) {
+                repository.insertCompletions(parsed.completions)
             }
             prefs.edit()
                 .putLong(KEY_LAST_BACKUP_TIME, System.currentTimeMillis())
-                .putInt(KEY_LAST_BACKUP_COUNT, tasks.size)
+                .putInt(KEY_LAST_BACKUP_COUNT, parsed.tasks.size)
                 .apply()
-            Result.success(tasks.size)
+            Result.success(parsed.tasks.size)
         } catch (e: Exception) {
             Log.e(TAG, "Error restoring from JSON: ${e.message}", e)
             Result.failure(e)
