@@ -290,7 +290,7 @@ fun MonthlyView(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "${AppDate.dayOfWeekShort(selectedDate.dayOfWeek())}, ${selectedDate.day} ${AppDate.monthNameShort(selectedDate.month)}",
+                                text = "${AppDate.dayOfWeekName(selectedDate.dayOfWeek())} ${selectedDate.day} ${AppDate.monthName(selectedDate.month)} ${selectedDate.year}",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -299,39 +299,19 @@ fun MonthlyView(
                             )
                         }
 
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        OutlinedButton(
+                            onClick = onSwitchToDailyView,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.testTag("open_daily_view_button")
                         ) {
-                            OutlinedButton(
-                                onClick = onSwitchToDailyView,
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.testTag("open_daily_view_button")
-                            ) {
-                                Icon(
-                                    Icons.Default.EditCalendar,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Open Day", fontSize = 12.sp)
-                            }
-
-                            Button(
-                                onClick = onAddTaskForDay,
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.testTag("monthly_add_task_button")
-                            ) {
-                                Icon(
-                                    Icons.Default.Add,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Add", fontSize = 12.sp)
-                            }
+                            Icon(
+                                Icons.Default.EditCalendar,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Open Day", fontSize = 12.sp)
                         }
                     }
                 }
@@ -348,7 +328,7 @@ fun MonthlyView(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No tasks for ${selectedDate.day} ${AppDate.monthName(selectedDate.month)}. Tap + Add to schedule a task or recurring routine.",
+                        text = "No tasks for ${selectedDate.day} ${AppDate.monthName(selectedDate.month)}. Tap Open Day to schedule a task or view details.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center

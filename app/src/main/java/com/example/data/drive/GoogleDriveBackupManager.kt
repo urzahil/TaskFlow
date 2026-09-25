@@ -9,6 +9,7 @@ import com.example.data.model.TaskCompletionEntity
 import com.example.data.model.TaskEntity
 import com.example.data.repository.TaskRepository
 import com.example.ui.model.CategoryIcons
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -23,7 +24,7 @@ data class ParsedBackup(
     val categories: List<CategoryEntity> = emptyList()
 )
 
-class GoogleDriveBackupManager(
+open class GoogleDriveBackupManager(
     private val context: Context,
     private val repository: TaskRepository
 ) {
@@ -38,19 +39,19 @@ class GoogleDriveBackupManager(
         private const val KEY_HAS_CHECKED_INSTALL_RESTORE = "has_checked_install_restore"
     }
 
-    fun getGoogleSignInClient() = driveService.getGoogleSignInClient()
+    open fun getGoogleSignInClient() = driveService.getGoogleSignInClient()
 
-    fun getSignedInAccount() = driveService.getSignedInAccount()
+    open fun getSignedInAccount(): GoogleSignInAccount? = driveService.getSignedInAccount()
 
-    fun isAutoBackupEnabled(): Boolean = prefs.getBoolean(KEY_AUTO_BACKUP, true)
+    open fun isAutoBackupEnabled(): Boolean = prefs.getBoolean(KEY_AUTO_BACKUP, true)
 
-    fun setAutoBackupEnabled(enabled: Boolean) {
+    open fun setAutoBackupEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_AUTO_BACKUP, enabled).apply()
     }
 
-    fun getLastBackupTime(): Long = prefs.getLong(KEY_LAST_BACKUP_TIME, 0L)
+    open fun getLastBackupTime(): Long = prefs.getLong(KEY_LAST_BACKUP_TIME, 0L)
 
-    fun getLastBackupCount(): Int = prefs.getInt(KEY_LAST_BACKUP_COUNT, 0)
+    open fun getLastBackupCount(): Int = prefs.getInt(KEY_LAST_BACKUP_COUNT, 0)
 
     fun getLastBackupTimeFormatted(): String? {
         val time = getLastBackupTime()
@@ -219,7 +220,7 @@ class GoogleDriveBackupManager(
     /**
      * Backs up tasks and categories to Google Drive
      */
-    suspend fun backupToDrive(
+    open suspend fun backupToDrive(
         tasks: List<TaskEntity>,
         completions: List<TaskCompletionEntity>,
         categories: List<CategoryEntity> = emptyList()
@@ -239,7 +240,7 @@ class GoogleDriveBackupManager(
      * Restores tasks and custom categories from Google Drive into Room database.
      * Clears existing default categories and sample tasks so only backup data remains.
      */
-    suspend fun restoreFromDrive(): Result<Int> = withContext(Dispatchers.IO) {
+    open suspend fun restoreFromDrive(): Result<Int> = withContext(Dispatchers.IO) {
         val downloadResult = driveService.downloadBackup()
         if (downloadResult.isFailure) {
             return@withContext Result.failure(

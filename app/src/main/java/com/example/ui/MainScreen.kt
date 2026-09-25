@@ -69,6 +69,9 @@ import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.CommonStatusCodes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -434,7 +437,7 @@ fun MainScreen(
                             viewModel.setShowGoogleError10Dialog(true)
                         },
                         onExportJsonBackup = {
-                            exportJsonLauncher.launch("taskflow_backup_${selectedDate.toIsoString()}.json")
+                            exportJsonLauncher.launch(generateBackupFileName())
                         },
                         onImportJsonBackup = {
                             importJsonLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
@@ -443,7 +446,7 @@ fun MainScreen(
                             coroutineScope.launch(Dispatchers.IO) {
                                 try {
                                     val json = viewModel.getBackupJsonString()
-                                    val fileName = "taskflow_backup_${selectedDate.toIsoString()}.json"
+                                    val fileName = generateBackupFileName()
                                     GoogleOAuthHelper.shareBackupFile(context, json, fileName)
                                 } catch (e: Exception) {
                                     snackbarHostState.showSnackbar("Failed to share backup: ${e.message}")
@@ -467,4 +470,9 @@ fun MainScreen(
             onDelete = { task -> viewModel.deleteTask(task) }
         )
     }
+}
+
+private fun generateBackupFileName(): String {
+    val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.getDefault()).format(Date())
+    return "taskflow_backup_$timestamp.json"
 }

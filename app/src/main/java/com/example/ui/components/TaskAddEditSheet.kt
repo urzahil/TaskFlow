@@ -28,7 +28,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -90,7 +90,7 @@ val CATEGORIES = listOf(
     CategoryOption("General", Icons.Default.CalendarMonth, 0xFF3B82F6),
     CategoryOption("Work", Icons.Default.Work, 0xFF2563EB),
     CategoryOption("Personal", Icons.Default.Person, 0xFF8B5CF6),
-    CategoryOption("Health", Icons.Default.Spa, 0xFF10B981),
+    CategoryOption("Pets", Icons.Default.Pets, 0xFF10B981),
     CategoryOption("Fitness", Icons.Default.FitnessCenter, 0xFFF59E0B),
     CategoryOption("Home", Icons.Default.Home, 0xFF059669),
     CategoryOption("Study", Icons.Default.School, 0xFF6366F1)
@@ -548,7 +548,7 @@ fun TaskAddEditSheet(
                             contentColor = MaterialTheme.colorScheme.error
                         ),
                         modifier = Modifier
-                            .weight(1f)
+                            .weight(1.2f)
                             .testTag("delete_task_button")
                     ) {
                         Icon(
@@ -557,7 +557,7 @@ fun TaskAddEditSheet(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Delete")
+                        Text("Delete", fontWeight = FontWeight.SemiBold)
                     }
                 }
 
@@ -581,7 +581,7 @@ fun TaskAddEditSheet(
                     },
                     enabled = title.isNotBlank(),
                     modifier = Modifier
-                        .weight(2f)
+                        .weight(if (existingTask != null && onDelete != null) 1.8f else 1f)
                         .testTag("save_task_button"),
                     shape = RoundedCornerShape(12.dp)
                 ) {

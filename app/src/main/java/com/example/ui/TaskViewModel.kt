@@ -13,6 +13,10 @@ import com.example.ui.model.TaskFilter
 import com.example.ui.model.TaskItemUi
 import com.example.ui.model.ViewMode
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import java.util.concurrent.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +25,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class DriveSyncState(
     val isSignedIn: Boolean = false,
@@ -45,6 +51,16 @@ class TaskViewModel(
     private val repository: TaskRepository,
     val driveBackupManager: GoogleDriveBackupManager
 ) : ViewModel() {
+
+    companion object {
+        const val DEFAULT_AUTO_BACKUP_DEBOUNCE_MS = 800L
+    }
+
+    private val driveBackupMutex = Mutex()
+    private val autoBackupChannel = Channel<Unit>(Channel.CONFLATED)
+    private var debounceJob: Job? = null
+    @Volatile
+    private var isAutoBackupPending = false
 
     private val today = AppDate.today()
 
@@ -128,6 +144,13 @@ class TaskViewModel(
 
             // Run startup task to clean old completed tasks and move uncompleted tasks to today
             runCleanupAndRollover()
+        }
+
+        // Serialized auto-backup worker loop
+        viewModelScope.launch {
+            for (event in autoBackupChannel) {
+                executeAutoBackupLoop()
+            }
         }
     }
 
@@ -223,6 +246,15 @@ class TaskViewModel(
         initialValue = DailyStats()
     )
 
+    private data class ParsedTaskSchedule(
+        val id: Long,
+        val colorHex: Long,
+        val isRecurring: Boolean,
+        val recurrenceDays: Int,
+        val startDate: AppDate,
+        val endDate: AppDate?
+    )
+
     /**
      * Map of Date ISO string to DaySummaryUi for all days in the currently selected month.
      * Highlighting days with something scheduled!
@@ -230,10 +262,40 @@ class TaskViewModel(
     val monthDaysSummary: StateFlow<Map<String, DaySummaryUi>> = combine(
         repository.allTasks,
         repository.allCompletions,
-        _selectedYearMonth
-    ) { tasks, completions, (year, month) ->
+        _selectedYearMonth,
+        _viewMode
+    ) { tasks, completions, (year, month), currentViewMode ->
+        // Avoid month-summary work when the monthly view is not active
+        if (currentViewMode != ViewMode.MONTHLY) {
+            return@combine emptyMap<String, DaySummaryUi>()
+        }
+
         val daysInMonth = AppDate.daysInMonth(year, month)
         val summaryMap = mutableMapOf<String, DaySummaryUi>()
+
+        // Precompute reusable schedule information once per task update instead of per day
+        val parsedTasks = tasks.mapNotNull { task ->
+            val start = try {
+                AppDate.parseIso(task.startDate)
+            } catch (_: Exception) {
+                null
+            } ?: return@mapNotNull null
+
+            val end = if (!task.endDate.isNullOrBlank()) {
+                try { AppDate.parseIso(task.endDate) } catch (_: Exception) { null }
+            } else null
+
+            val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
+
+            ParsedTaskSchedule(
+                id = task.id,
+                colorHex = task.colorHex,
+                isRecurring = task.isRecurring,
+                recurrenceDays = interval,
+                startDate = start,
+                endDate = end
+            )
+        }
 
         // Pre-group completions by date
         val completionsByDate = completions.groupBy { it.date }
@@ -244,8 +306,18 @@ class TaskViewModel(
 
             val completedIds = completionsByDate[dateIso]?.map { it.taskId }?.toSet() ?: emptySet()
 
-            val scheduledTasks = tasks.filter { task ->
-                repository.isTaskScheduledOnDate(task, date)
+            val scheduledTasks = parsedTasks.filter { task ->
+                if (!task.isRecurring) {
+                    task.startDate == date
+                } else {
+                    if (date < task.startDate) {
+                        false
+                    } else if (task.endDate != null && date > task.endDate) {
+                        false
+                    } else {
+                        date.daysBetween(task.startDate) % task.recurrenceDays == 0L
+                    }
+                }
             }
 
             if (scheduledTasks.isNotEmpty()) {
@@ -264,7 +336,7 @@ class TaskViewModel(
         summaryMap
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
+        started = SharingStarted.Eagerly,
         initialValue = emptyMap()
     )
 
@@ -413,17 +485,51 @@ class TaskViewModel(
         }
     }
 
-    private fun triggerAutoBackup() {
+    fun triggerAutoBackup(debounceMs: Long = DEFAULT_AUTO_BACKUP_DEBOUNCE_MS) {
         if (!driveBackupManager.isAutoBackupEnabled()) return
         if (driveBackupManager.getSignedInAccount() == null) return
-        viewModelScope.launch {
-            try {
-                val tasks = repository.allTasks.first()
-                val completions = repository.allCompletions.first()
-                val categories = repository.allCategories.first()
-                driveBackupManager.backupToDrive(tasks, completions, categories)
-                refreshDriveState()
-            } catch (_: Exception) {}
+
+        isAutoBackupPending = true
+        debounceJob?.cancel()
+        debounceJob = viewModelScope.launch {
+            if (debounceMs > 0) {
+                delay(debounceMs)
+            }
+            autoBackupChannel.send(Unit)
+        }
+    }
+
+    suspend fun flushAutoBackup() {
+        debounceJob?.cancel()
+        if (isAutoBackupPending) {
+            autoBackupChannel.send(Unit)
+        }
+        driveBackupMutex.withLock { /* Wait for in-flight backup to complete */ }
+    }
+
+    private suspend fun executeAutoBackupLoop() {
+        driveBackupMutex.withLock {
+            while (isAutoBackupPending) {
+                isAutoBackupPending = false
+                if (!driveBackupManager.isAutoBackupEnabled() || driveBackupManager.getSignedInAccount() == null) {
+                    break
+                }
+                try {
+                    val tasks = repository.allTasks.first()
+                    val completions = repository.allCompletions.first()
+                    val categories = repository.allCategories.first()
+                    val result = driveBackupManager.backupToDrive(tasks, completions, categories)
+                    if (result.isSuccess) {
+                        refreshDriveState()
+                    } else {
+                        val err = result.exceptionOrNull()?.message ?: "Auto-backup failed"
+                        refreshDriveState(message = "Auto-backup error: $err", isError = true)
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    refreshDriveState(message = "Auto-backup failed: ${e.message}", isError = true)
+                }
+            }
         }
     }
 
@@ -445,20 +551,23 @@ class TaskViewModel(
         viewModelScope.launch {
             _driveSyncState.value = _driveSyncState.value.copy(isSyncing = true, syncMessage = null)
             try {
-                val tasks = repository.allTasks.first()
-                val completions = repository.allCompletions.first()
-                val categories = repository.allCategories.first()
-                val result = driveBackupManager.backupToDrive(tasks, completions, categories)
-                if (result.isSuccess) {
-                    refreshDriveState(
-                        message = "Backed up ${tasks.size} tasks & ${categories.size} categories to Google Drive! ☁️",
-                        isError = false
-                    )
-                } else {
-                    val err = result.exceptionOrNull()?.message ?: "Backup failed"
-                    refreshDriveState(message = "Backup error: $err", isError = true)
+                driveBackupMutex.withLock {
+                    val tasks = repository.allTasks.first()
+                    val completions = repository.allCompletions.first()
+                    val categories = repository.allCategories.first()
+                    val result = driveBackupManager.backupToDrive(tasks, completions, categories)
+                    if (result.isSuccess) {
+                        refreshDriveState(
+                            message = "Backed up ${tasks.size} tasks & ${categories.size} categories to Google Drive! ☁️",
+                            isError = false
+                        )
+                    } else {
+                        val err = result.exceptionOrNull()?.message ?: "Backup failed"
+                        refreshDriveState(message = "Backup error: $err", isError = true)
+                    }
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 refreshDriveState(message = "Backup failed: ${e.message}", isError = true)
             }
         }

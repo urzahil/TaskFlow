@@ -25,7 +25,7 @@ object CategoryIcons {
         "general" to Icons.Default.CalendarMonth,
         "work" to Icons.Default.Work,
         "personal" to Icons.Default.Person,
-        "health" to Icons.Default.Spa,
+        "pets" to Icons.Default.Pets,
         "fitness" to Icons.Default.FitnessCenter,
         "home" to Icons.Default.Home,
         "study" to Icons.Default.School,
@@ -35,7 +35,6 @@ object CategoryIcons {
         "heart" to Icons.Default.Favorite,
         "idea" to Icons.Default.Lightbulb,
         "travel" to Icons.Default.Flight,
-        "pets" to Icons.Default.Pets,
         "creative" to Icons.Default.Palette,
         "music" to Icons.Default.MusicNote,
         "flag" to Icons.Default.Flag
@@ -57,6 +56,7 @@ object CategoryIcons {
     )
 
     fun getIcon(iconName: String): ImageVector {
+        if (iconName == "health") return Icons.Default.Pets
         return AVAILABLE_ICONS.firstOrNull { it.first == iconName }?.second ?: Icons.Default.Bookmark
     }
 

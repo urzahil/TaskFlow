@@ -113,16 +113,20 @@ class TaskRepository(private val taskDao: TaskDao) {
         var movedCount = 0
         var cleanedRecurringOccurrences = 0
 
+        val tasksToDelete = mutableListOf<TaskEntity>()
+        val tasksToUpdate = mutableListOf<TaskEntity>()
+        val taskIdsForCompletionDeletion = mutableListOf<Long>()
+
         // 1. Clean completed non-recurring tasks and roll forward uncompleted tasks
         for (task in pastTasks) {
             if (task.id in completedTaskIds) {
                 // Task was completed in the past: clean it up
-                taskDao.deleteCompletionsForTask(task.id)
-                taskDao.deleteTask(task)
+                tasksToDelete.add(task)
+                taskIdsForCompletionDeletion.add(task.id)
                 cleanedCount++
             } else {
                 // Task was uncompleted in the past: move it forward to today
-                taskDao.insertTask(task.copy(startDate = todayIso))
+                tasksToUpdate.add(task.copy(startDate = todayIso))
                 movedCount++
             }
         }
@@ -140,8 +144,8 @@ class TaskRepository(private val taskDao: TaskDao) {
             if (!task.endDate.isNullOrBlank()) {
                 val end = try { AppDate.parseIso(task.endDate) } catch (_: Exception) { null }
                 if (end != null && end < today) {
-                    taskDao.deleteCompletionsForTask(task.id)
-                    taskDao.deleteTask(task)
+                    tasksToDelete.add(task)
+                    taskIdsForCompletionDeletion.add(task.id)
                     cleanedCount++
                     continue
                 }
@@ -165,22 +169,24 @@ class TaskRepository(private val taskDao: TaskDao) {
                 if (!task.endDate.isNullOrBlank()) {
                     val end = try { AppDate.parseIso(task.endDate) } catch (_: Exception) { null }
                     if (end != null && nextOccurrence > end) {
-                        taskDao.deleteCompletionsForTask(task.id)
-                        taskDao.deleteTask(task)
+                        tasksToDelete.add(task)
+                        taskIdsForCompletionDeletion.add(task.id)
                         cleanedCount++
                         continue
                     }
                 }
 
-                taskDao.insertTask(task.copy(startDate = nextOccurrence.toIsoString()))
+                tasksToUpdate.add(task.copy(startDate = nextOccurrence.toIsoString()))
             }
         }
 
-        // 3. Delete past completions from previous days
-        taskDao.deleteCompletionsBefore(todayIso)
-
-        // 4. Clean orphan completions
-        taskDao.cleanOrphanCompletions()
+        // 3. Apply all deletions, updates, past completions removal, and orphan cleanup in one atomic transaction
+        taskDao.performCleanupAndRolloverBatch(
+            tasksToDelete = tasksToDelete,
+            tasksToUpdate = tasksToUpdate,
+            taskIdsForCompletionDeletion = taskIdsForCompletionDeletion,
+            todayIso = todayIso
+        )
 
         return RolloverResult(
             cleanedCount = cleanedCount,

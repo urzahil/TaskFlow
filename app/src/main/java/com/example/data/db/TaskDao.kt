@@ -95,6 +95,32 @@ interface TaskDao {
     @Query("DELETE FROM task_completions WHERE taskId NOT IN (SELECT id FROM tasks)")
     suspend fun cleanOrphanCompletions()
 
+    @Delete
+    suspend fun deleteTasks(tasks: List<TaskEntity>)
+
+    @Query("DELETE FROM task_completions WHERE taskId IN (:taskIds)")
+    suspend fun deleteCompletionsForTaskIds(taskIds: List<Long>)
+
+    @Transaction
+    suspend fun performCleanupAndRolloverBatch(
+        tasksToDelete: List<TaskEntity>,
+        tasksToUpdate: List<TaskEntity>,
+        taskIdsForCompletionDeletion: List<Long>,
+        todayIso: String
+    ) {
+        if (taskIdsForCompletionDeletion.isNotEmpty()) {
+            deleteCompletionsForTaskIds(taskIdsForCompletionDeletion)
+        }
+        if (tasksToDelete.isNotEmpty()) {
+            deleteTasks(tasksToDelete)
+        }
+        if (tasksToUpdate.isNotEmpty()) {
+            insertTasks(tasksToUpdate)
+        }
+        deleteCompletionsBefore(todayIso)
+        cleanOrphanCompletions()
+    }
+
     @Query("DELETE FROM tasks")
     suspend fun deleteAllTasks()
 
