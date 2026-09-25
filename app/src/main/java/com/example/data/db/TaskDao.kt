@@ -101,6 +101,9 @@ interface TaskDao {
     @Query("DELETE FROM task_completions WHERE taskId IN (:taskIds)")
     suspend fun deleteCompletionsForTaskIds(taskIds: List<Long>)
 
+    @Query("UPDATE tasks SET startDate = :newStartDate WHERE id = :taskId")
+    suspend fun updateTaskStartDate(taskId: Long, newStartDate: String)
+
     @Transaction
     suspend fun performCleanupAndRolloverBatch(
         tasksToDelete: List<TaskEntity>,
@@ -115,7 +118,9 @@ interface TaskDao {
             deleteTasks(tasksToDelete)
         }
         if (tasksToUpdate.isNotEmpty()) {
-            insertTasks(tasksToUpdate)
+            for (task in tasksToUpdate) {
+                updateTaskStartDate(task.id, task.startDate)
+            }
         }
         deleteCompletionsBefore(todayIso)
         cleanOrphanCompletions()

@@ -154,18 +154,46 @@ class TaskRepository(private val taskDao: TaskDao) {
             // If start date is before today, delete old occurrences by moving start date to the first occurrence on or after today
             if (start < today) {
                 val nextOccurrence: AppDate
-                if (!task.recurrenceDaysOfWeek.isNullOrBlank()) {
-                    val selectedDays = task.recurrenceDaysOfWeek.split(",")
-                        .mapNotNull { it.trim().toIntOrNull() }
-                        .toSet()
+                val validDaysOfWeek = task.parsedDaysOfWeek()
+                if (validDaysOfWeek.isNotEmpty()) {
+                    // 1. Bound search to at most 7 days starting from today
                     var candidate = today
-                    if (selectedDays.isNotEmpty()) {
-                        while (candidate.dayOfWeek() !in selectedDays) {
-                            candidate = candidate.plusDays(1)
+                    var found = false
+                    for (step in 0..7) {
+                        if (candidate.dayOfWeek() in validDaysOfWeek) {
+                            found = true
+                            break
                         }
+                        candidate = candidate.plusDays(1)
                     }
-                    nextOccurrence = candidate
-                    cleanedRecurringOccurrences++
+                    nextOccurrence = if (found) candidate else today
+
+                    // 2. Count past occurrences between start and today (exclusive of today)
+                    val pastDaysCount = today.minusDays(1).daysBetween(start)
+                    if (pastDaysCount >= 0) {
+                        val wholeWeeks = pastDaysCount / 7
+                        val remainingDays = (pastDaysCount % 7).toInt()
+                        var count = wholeWeeks * validDaysOfWeek.size
+                        for (offset in 0..remainingDays) {
+                            val d = start.plusDays(offset.toLong())
+                            if (d.dayOfWeek() in validDaysOfWeek) {
+                                count++
+                            }
+                        }
+                        cleanedRecurringOccurrences += count.toInt()
+                    }
+                } else if (!task.recurrenceDaysOfWeek.isNullOrBlank()) {
+                    // Invalid/unparseable recurrenceDaysOfWeek data (e.g. "8"): fallback safely to interval or daily
+                    val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
+                    val diffDays = today.daysBetween(start)
+                    val remainder = diffDays % interval
+                    val daysToNext = if (remainder == 0L) 0L else (interval - remainder)
+                    nextOccurrence = today.plusDays(daysToNext)
+
+                    val pastDaysCount = today.minusDays(1).daysBetween(start)
+                    if (pastDaysCount >= 0) {
+                        cleanedRecurringOccurrences += (pastDaysCount / interval + 1).toInt()
+                    }
                 } else {
                     val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
                     val diffDays = today.daysBetween(start)
@@ -242,13 +270,9 @@ class TaskRepository(private val taskDao: TaskDao) {
         }
 
         // If specific days of the week are selected, check if targetDate falls on one of them
-        if (!task.recurrenceDaysOfWeek.isNullOrBlank()) {
-            val selectedDays = task.recurrenceDaysOfWeek.split(",")
-                .mapNotNull { it.trim().toIntOrNull() }
-                .toSet()
-            if (selectedDays.isNotEmpty()) {
-                return targetDate.dayOfWeek() in selectedDays
-            }
+        val validDaysOfWeek = task.parsedDaysOfWeek()
+        if (validDaysOfWeek.isNotEmpty()) {
+            return targetDate.dayOfWeek() in validDaysOfWeek
         }
 
         val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1

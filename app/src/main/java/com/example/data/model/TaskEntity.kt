@@ -18,4 +18,16 @@ data class TaskEntity(
     val startDate: String, // ISO YYYY-MM-DD
     val endDate: String? = null, // Optional ISO YYYY-MM-DD
     val createdAt: Long = System.currentTimeMillis()
-)
+) {
+    /**
+     * Parses and returns the valid set of ISO weekdays (1 = Monday, 7 = Sunday).
+     * Any invalid values (e.g. outside 1..7, unparseable) are discarded.
+     */
+    fun parsedDaysOfWeek(): Set<Int> {
+        if (recurrenceDaysOfWeek.isNullOrBlank()) return emptySet()
+        return recurrenceDaysOfWeek.split(",")
+            .mapNotNull { it.trim().toIntOrNull() }
+            .filter { it in 1..7 }
+            .toSet()
+    }
+}

@@ -94,7 +94,7 @@ class TaskRecurrenceTest {
         assertEquals(7, sun.dayOfWeek())
         assertEquals(1, nextMon.dayOfWeek())
 
-        val taskDays = task.recurrenceDaysOfWeek!!.split(",").map { it.toInt() }.toSet()
+        val taskDays = task.parsedDaysOfWeek()
         assertTrue(mon.dayOfWeek() in taskDays)
         assertFalse(tue.dayOfWeek() in taskDays)
         assertTrue(wed.dayOfWeek() in taskDays)
@@ -103,5 +103,28 @@ class TaskRecurrenceTest {
         assertFalse(sat.dayOfWeek() in taskDays)
         assertFalse(sun.dayOfWeek() in taskDays)
         assertTrue(nextMon.dayOfWeek() in taskDays)
+    }
+
+    @Test
+    fun testInvalidRecurrenceDaysOfWeekDiscarded() {
+        val taskWith8 = TaskEntity(
+            id = 4,
+            title = "Invalid dow",
+            isRecurring = true,
+            recurrenceDays = 7,
+            recurrenceDaysOfWeek = "8",
+            startDate = "2026-09-21"
+        )
+        assertTrue(taskWith8.parsedDaysOfWeek().isEmpty())
+
+        val taskWithMixed = TaskEntity(
+            id = 5,
+            title = "Mixed dow",
+            isRecurring = true,
+            recurrenceDays = 7,
+            recurrenceDaysOfWeek = "1,8,hello,5,-1",
+            startDate = "2026-09-21"
+        )
+        assertEquals(setOf(1, 5), taskWithMixed.parsedDaysOfWeek())
     }
 }

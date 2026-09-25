@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -162,6 +163,11 @@ class TaskViewModel(
 
             // Run startup task to clean old completed tasks and move uncompleted tasks to today
             runCleanupAndRollover()
+
+            // If a previous auto-backup was pending durable across restart, trigger it now
+            if (driveBackupManager.isBackupPendingDurable()) {
+                triggerAutoBackup(debounceMs = 1500L)
+            }
         }
 
         // Serialized auto-backup worker loop
@@ -186,33 +192,119 @@ class TaskViewModel(
         }
     }
 
+    private data class ParsedTaskSchedule(
+        val id: Long,
+        val colorHex: Long,
+        val isRecurring: Boolean,
+        val recurrenceDays: Int,
+        val recurrenceDaysOfWeek: Set<Int>,
+        val startDate: AppDate,
+        val endDate: AppDate?
+    ) {
+        fun isScheduledOn(date: AppDate): Boolean {
+            if (!isRecurring) {
+                return startDate == date
+            }
+            if (date < startDate) return false
+            if (endDate != null && date > endDate) return false
+            if (recurrenceDaysOfWeek.isNotEmpty()) {
+                return recurrenceDaysOfWeek.contains(date.dayOfWeek())
+            }
+            return date.daysBetween(startDate) % recurrenceDays == 0L
+        }
+    }
+
     /**
-     * Tasks for the currently selected date.
+     * Pre-parsed tasks for fast scheduling calculations without repeated string parsing or date calculations.
      */
-    val dailyTasks: StateFlow<List<TaskItemUi>> = combine(
-        repository.allTasks,
+    private val parsedTasksState: StateFlow<List<Pair<TaskEntity, ParsedTaskSchedule>>> = repository.allTasks
+        .map { tasks ->
+            tasks.mapNotNull { task ->
+                val start = try {
+                    AppDate.parseIso(task.startDate)
+                } catch (_: Exception) {
+                    null
+                } ?: return@mapNotNull null
+
+                val end = if (!task.endDate.isNullOrBlank()) {
+                    try { AppDate.parseIso(task.endDate) } catch (_: Exception) { null }
+                } else null
+
+                val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
+                val daysOfWeekSet = task.parsedDaysOfWeek()
+
+                val schedule = ParsedTaskSchedule(
+                    id = task.id,
+                    colorHex = task.colorHex,
+                    isRecurring = task.isRecurring,
+                    recurrenceDays = interval,
+                    recurrenceDaysOfWeek = daysOfWeekSet,
+                    startDate = start,
+                    endDate = end
+                )
+                Pair(task, schedule)
+            }
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    private data class DailyCalculationResult(
+        val items: List<TaskItemUi>,
+        val stats: DailyStats
+    )
+
+    /**
+     * Shared computation of daily scheduled tasks and stats for the selected date.
+     */
+    private val dailyCalculation: StateFlow<DailyCalculationResult> = combine(
+        parsedTasksState,
         repository.allCompletions,
-        _selectedDate,
-        _taskFilter,
-        _searchQuery
-    ) { tasks, completions, date, filter, query ->
+        _selectedDate
+    ) { parsedTasks, completions, date ->
         val dateIso = date.toIsoString()
         val completedTaskIds = completions
             .filter { it.date == dateIso }
             .map { it.taskId }
             .toSet()
 
-        val scheduledTasks = tasks.filter { task ->
-            repository.isTaskScheduledOnDate(task, date)
+        val scheduledItems = mutableListOf<TaskItemUi>()
+        var completedCount = 0
+
+        for ((task, schedule) in parsedTasks) {
+            if (schedule.isScheduledOn(date)) {
+                val isCompleted = completedTaskIds.contains(task.id)
+                if (isCompleted) completedCount++
+                scheduledItems.add(
+                    TaskItemUi(
+                        task = task,
+                        date = date,
+                        isCompleted = isCompleted
+                    )
+                )
+            }
         }
 
-        val items = scheduledTasks.map { task ->
-            TaskItemUi(
-                task = task,
-                date = date,
-                isCompleted = completedTaskIds.contains(task.id)
-            )
-        }
+        DailyCalculationResult(
+            items = scheduledItems,
+            stats = DailyStats(total = scheduledItems.size, completed = completedCount)
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = DailyCalculationResult(emptyList(), DailyStats())
+    )
+
+    /**
+     * Tasks for the currently selected date with filter & search applied.
+     */
+    val dailyTasks: StateFlow<List<TaskItemUi>> = combine(
+        dailyCalculation,
+        _taskFilter,
+        _searchQuery
+    ) { calculation, filter, query ->
+        val items = calculation.items
 
         // Apply search query
         val queryFiltered = if (query.isBlank()) {
@@ -240,50 +332,24 @@ class TaskViewModel(
     /**
      * Statistics for the currently selected date (total, completed).
      */
-    val dailyStats: StateFlow<DailyStats> = combine(
-        repository.allTasks,
-        repository.allCompletions,
-        _selectedDate
-    ) { tasks, completions, date ->
-        val dateIso = date.toIsoString()
-        val completedTaskIds = completions
-            .filter { it.date == dateIso }
-            .map { it.taskId }
-            .toSet()
-
-        val scheduledTasks = tasks.filter { task ->
-            repository.isTaskScheduledOnDate(task, date)
-        }
-
-        val total = scheduledTasks.size
-        val completed = scheduledTasks.count { completedTaskIds.contains(it.id) }
-        DailyStats(total = total, completed = completed)
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = DailyStats()
-    )
-
-    private data class ParsedTaskSchedule(
-        val id: Long,
-        val colorHex: Long,
-        val isRecurring: Boolean,
-        val recurrenceDays: Int,
-        val recurrenceDaysOfWeek: Set<Int>?,
-        val startDate: AppDate,
-        val endDate: AppDate?
-    )
+    val dailyStats: StateFlow<DailyStats> = dailyCalculation
+        .map { it.stats }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = DailyStats()
+        )
 
     /**
      * Map of Date ISO string to DaySummaryUi for all days in the currently selected month.
-     * Highlighting days with something scheduled!
+     * Highlighting days with something scheduled while preserving task color ordering!
      */
     val monthDaysSummary: StateFlow<Map<String, DaySummaryUi>> = combine(
-        repository.allTasks,
+        parsedTasksState,
         repository.allCompletions,
         _selectedYearMonth,
         _viewMode
-    ) { tasks, completions, (year, month), currentViewMode ->
+    ) { parsedTasks, completions, (year, month), currentViewMode ->
         // Avoid month-summary work when the monthly view is not active
         if (currentViewMode != ViewMode.MONTHLY) {
             return@combine emptyMap<String, DaySummaryUi>()
@@ -292,66 +358,36 @@ class TaskViewModel(
         val daysInMonth = AppDate.daysInMonth(year, month)
         val summaryMap = mutableMapOf<String, DaySummaryUi>()
 
-        // Precompute reusable schedule information once per task update instead of per day
-        val parsedTasks = tasks.mapNotNull { task ->
-            val start = try {
-                AppDate.parseIso(task.startDate)
-            } catch (_: Exception) {
-                null
-            } ?: return@mapNotNull null
-
-            val end = if (!task.endDate.isNullOrBlank()) {
-                try { AppDate.parseIso(task.endDate) } catch (_: Exception) { null }
-            } else null
-
-            val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
-            val daysOfWeekSet = if (!task.recurrenceDaysOfWeek.isNullOrBlank()) {
-                task.recurrenceDaysOfWeek.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
-            } else null
-
-            ParsedTaskSchedule(
-                id = task.id,
-                colorHex = task.colorHex,
-                isRecurring = task.isRecurring,
-                recurrenceDays = interval,
-                recurrenceDaysOfWeek = daysOfWeekSet,
-                startDate = start,
-                endDate = end
-            )
-        }
-
         // Pre-group completions by date
         val completionsByDate = completions.groupBy { it.date }
 
+        // Invert iteration: evaluate each day with pre-parsed schedules
         for (day in 1..daysInMonth) {
             val date = AppDate(year, month, day)
             val dateIso = date.toIsoString()
 
             val completedIds = completionsByDate[dateIso]?.map { it.taskId }?.toSet() ?: emptySet()
 
-            val scheduledTasks = parsedTasks.filter { task ->
-                if (!task.isRecurring) {
-                    task.startDate == date
-                } else {
-                    if (date < task.startDate) {
-                        false
-                    } else if (task.endDate != null && date > task.endDate) {
-                        false
-                    } else if (!task.recurrenceDaysOfWeek.isNullOrEmpty()) {
-                        task.recurrenceDaysOfWeek.contains(date.dayOfWeek())
-                    } else {
-                        date.daysBetween(task.startDate) % task.recurrenceDays == 0L
+            var totalTasks = 0
+            var completedCount = 0
+            val colors = mutableListOf<Long>()
+
+            for ((_, schedule) in parsedTasks) {
+                if (schedule.isScheduledOn(date)) {
+                    totalTasks++
+                    if (completedIds.contains(schedule.id)) {
+                        completedCount++
+                    }
+                    if (colors.size < 3) {
+                        colors.add(schedule.colorHex)
                     }
                 }
             }
 
-            if (scheduledTasks.isNotEmpty()) {
-                val completedCount = scheduledTasks.count { completedIds.contains(it.id) }
-                val colors = scheduledTasks.take(3).map { it.colorHex }
-
+            if (totalTasks > 0) {
                 summaryMap[dateIso] = DaySummaryUi(
                     date = date,
-                    totalTasks = scheduledTasks.size,
+                    totalTasks = totalTasks,
                     completedTasks = completedCount,
                     taskColors = colors
                 )
@@ -510,11 +546,15 @@ class TaskViewModel(
         }
     }
 
+    private var autoBackupFailureRetryCount = 0
+    private val maxAutoBackupRetries = 3
+
     fun triggerAutoBackup(debounceMs: Long = DEFAULT_AUTO_BACKUP_DEBOUNCE_MS) {
         if (!driveBackupManager.isAutoBackupEnabled()) return
         if (driveBackupManager.getSignedInAccount() == null) return
 
         isAutoBackupPending = true
+        driveBackupManager.setBackupPendingDurable(true)
         debounceJob?.cancel()
         debounceJob = viewModelScope.launch {
             if (debounceMs > 0) {
@@ -535,24 +575,49 @@ class TaskViewModel(
     private suspend fun executeAutoBackupLoop() {
         driveBackupMutex.withLock {
             while (isAutoBackupPending) {
-                isAutoBackupPending = false
                 if (!driveBackupManager.isAutoBackupEnabled() || driveBackupManager.getSignedInAccount() == null) {
+                    isAutoBackupPending = false
                     break
                 }
-                try {
-                    val tasks = repository.allTasks.first()
-                    val completions = repository.allCompletions.first()
-                    val categories = repository.allCategories.first()
+
+                // Snap current snapshot of data
+                val tasks = repository.allTasks.first()
+                val completions = repository.allCompletions.first()
+                val categories = repository.allCategories.first()
+
+                // Mark that we are uploading this state
+                val uploaded = try {
                     val result = driveBackupManager.backupToDrive(tasks, completions, categories)
                     if (result.isSuccess) {
+                        autoBackupFailureRetryCount = 0
+                        // Clear pending flag only on successful upload if no new edits arrived during upload
+                        driveBackupManager.setBackupPendingDurable(false)
+                        isAutoBackupPending = false
                         refreshDriveState()
+                        true
                     } else {
                         val err = result.exceptionOrNull()?.message ?: "Auto-backup failed"
                         refreshDriveState(message = "Auto-backup error: $err", isError = true)
+                        false
                     }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     refreshDriveState(message = "Auto-backup failed: ${e.message}", isError = true)
+                    false
+                }
+
+                if (!uploaded) {
+                    autoBackupFailureRetryCount++
+                    if (autoBackupFailureRetryCount <= maxAutoBackupRetries) {
+                        // Bounded exponential backoff: 2s, 4s, 8s
+                        val backoffMs = (1000L * (1 shl autoBackupFailureRetryCount)).coerceAtMost(10000L)
+                        delay(backoffMs)
+                        // Keep isAutoBackupPending = true to retry next iteration
+                    } else {
+                        // Exhausted retries for this attempt, retain durable pending flag so future edit or app launch retries
+                        isAutoBackupPending = false
+                        break
+                    }
                 }
             }
         }

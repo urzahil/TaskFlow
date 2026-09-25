@@ -43,6 +43,7 @@ open class GoogleDriveBackupManager(
         private const val KEY_LAST_BACKUP_CATEGORIES_COUNT = "last_backup_categories_count"
         private const val KEY_AUTO_BACKUP = "auto_backup_enabled"
         private const val KEY_HAS_CHECKED_INSTALL_RESTORE = "has_checked_install_restore"
+        private const val KEY_PENDING_BACKUP = "durable_pending_backup"
     }
 
     open fun getGoogleSignInClient() = driveService.getGoogleSignInClient()
@@ -53,6 +54,12 @@ open class GoogleDriveBackupManager(
 
     open fun setAutoBackupEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_AUTO_BACKUP, enabled).apply()
+    }
+
+    open fun isBackupPendingDurable(): Boolean = prefs.getBoolean(KEY_PENDING_BACKUP, false)
+
+    open fun setBackupPendingDurable(pending: Boolean) {
+        prefs.edit().putBoolean(KEY_PENDING_BACKUP, pending).apply()
     }
 
     open fun getLastBackupTime(): Long = prefs.getLong(KEY_LAST_BACKUP_TIME, 0L)
@@ -145,7 +152,15 @@ open class GoogleDriveBackupManager(
             for (i in 0 until tasksArray.length()) {
                 val obj = tasksArray.getJSONObject(i)
                 val endDate = if (obj.isNull("endDate")) null else obj.optString("endDate", null)
-                val recurrenceDaysOfWeek = if (obj.isNull("recurrenceDaysOfWeek")) null else obj.optString("recurrenceDaysOfWeek", null)
+                val rawDaysOfWeek = if (obj.isNull("recurrenceDaysOfWeek")) null else obj.optString("recurrenceDaysOfWeek", null)
+                val sanitizedDaysOfWeek = rawDaysOfWeek?.split(",")
+                    ?.mapNotNull { it.trim().toIntOrNull() }
+                    ?.filter { it in 1..7 }
+                    ?.distinct()
+                    ?.sorted()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.joinToString(",")
+
                 val task = TaskEntity(
                     id = obj.optLong("id", System.currentTimeMillis() + i),
                     title = obj.getString("title"),
@@ -155,7 +170,7 @@ open class GoogleDriveBackupManager(
                     colorHex = obj.optLong("colorHex", 0xFF6750A4),
                     isRecurring = obj.optBoolean("isRecurring", false),
                     recurrenceDays = obj.optInt("recurrenceDays", 1),
-                    recurrenceDaysOfWeek = recurrenceDaysOfWeek,
+                    recurrenceDaysOfWeek = sanitizedDaysOfWeek,
                     startDate = obj.optString("startDate", AppDate.today().toIsoString()),
                     endDate = endDate,
                     createdAt = obj.optLong("createdAt", System.currentTimeMillis())
