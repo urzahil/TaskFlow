@@ -92,6 +92,7 @@ fun MainScreen(
     val editingTask by viewModel.editingTask.collectAsStateWithLifecycle()
     val maintenanceMessage by viewModel.maintenanceMessage.collectAsStateWithLifecycle()
     val driveSyncState by viewModel.driveSyncState.collectAsStateWithLifecycle()
+    val showDailyProgress by viewModel.showDailyProgress.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var isSearchActive by remember { mutableStateOf(false) }
@@ -379,7 +380,8 @@ fun MainScreen(
                         onToggleTask = { viewModel.toggleTaskCompletion(it) },
                         onEditTask = { viewModel.openEditTaskDialog(it) },
                         onDeleteTask = { viewModel.deleteTask(it) },
-                        onAddTask = { viewModel.openAddTaskDialog() }
+                        onAddTask = { viewModel.openAddTaskDialog() },
+                        showDailyProgress = showDailyProgress
                     )
                 }
                 ViewMode.MONTHLY -> {
@@ -452,7 +454,9 @@ fun MainScreen(
                                     snackbarHostState.showSnackbar("Failed to share backup: ${e.message}")
                                 }
                             }
-                        }
+                        },
+                        showDailyProgress = showDailyProgress,
+                        onToggleDailyProgress = { viewModel.setShowDailyProgress(it) }
                     )
                 }
             }

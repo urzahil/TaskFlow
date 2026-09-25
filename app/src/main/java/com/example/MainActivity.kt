@@ -20,7 +20,7 @@ class MainActivity : ComponentActivity() {
         val database = AppDatabase.getInstance(applicationContext)
         val repository = TaskRepository(database.taskDao())
         val driveBackupManager = GoogleDriveBackupManager(applicationContext, repository)
-        TaskViewModel.Factory(repository, driveBackupManager)
+        TaskViewModel.Factory(repository, driveBackupManager, applicationContext)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

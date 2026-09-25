@@ -94,6 +94,7 @@ fun DailyView(
     onEditTask: (TaskEntity) -> Unit,
     onDeleteTask: (TaskEntity) -> Unit,
     onAddTask: () -> Unit,
+    showDailyProgress: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val today = remember { AppDate.today() }
@@ -250,74 +251,76 @@ fun DailyView(
         }
 
         // Daily Progress Bar Card
-        item {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
+        if (showDailyProgress) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("daily_progress_card")
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = "Daily Progress",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = if (stats.total == 0) {
-                                    "No tasks scheduled"
-                                } else if (stats.completed == stats.total) {
-                                    "All ${stats.total} tasks completed! 🎉"
-                                } else {
-                                    "${stats.completed} of ${stats.total} completed (${(stats.progress * 100).toInt()}%)"
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        if (stats.total > 0 && stats.completed == stats.total) {
-                            Icon(
-                                Icons.Default.CheckCircle,
-                                contentDescription = "Completed",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-                    val animatedProgress by animateFloatAsState(
-                        targetValue = stats.progress,
-                        label = "daily_progress"
-                    )
-                    Box(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f))
+                            .padding(16.dp)
                     ) {
-                        if (animatedProgress > 0f) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(animatedProgress.coerceIn(0f, 1f))
-                                    .fillMaxHeight()
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(MaterialTheme.colorScheme.primary)
-                            )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "Daily Progress",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = if (stats.total == 0) {
+                                        "No tasks scheduled"
+                                    } else if (stats.completed == stats.total) {
+                                        "All ${stats.total} tasks completed! 🎉"
+                                    } else {
+                                        "${stats.completed} of ${stats.total} completed (${(stats.progress * 100).toInt()}%)"
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            if (stats.total > 0 && stats.completed == stats.total) {
+                                Icon(
+                                    Icons.Default.CheckCircle,
+                                    contentDescription = "Completed",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        val animatedProgress by animateFloatAsState(
+                            targetValue = stats.progress,
+                            label = "daily_progress"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f))
+                        ) {
+                            if (animatedProgress > 0f) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(animatedProgress.coerceIn(0f, 1f))
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(MaterialTheme.colorScheme.primary)
+                                )
+                            }
                         }
                     }
                 }

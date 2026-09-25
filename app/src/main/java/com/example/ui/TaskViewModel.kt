@@ -1,5 +1,6 @@
 package com.example.ui
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -34,6 +35,7 @@ data class DriveSyncState(
     val isSyncing: Boolean = false,
     val lastBackupTimeFormatted: String? = null,
     val lastBackupCount: Int = 0,
+    val lastBackupCategoriesCount: Int = 0,
     val autoBackupEnabled: Boolean = true,
     val syncMessage: String? = null,
     val isError: Boolean = false
@@ -49,11 +51,26 @@ data class DailyStats(
 
 class TaskViewModel(
     private val repository: TaskRepository,
-    val driveBackupManager: GoogleDriveBackupManager
+    val driveBackupManager: GoogleDriveBackupManager,
+    private val context: Context? = null
 ) : ViewModel() {
 
     companion object {
         const val DEFAULT_AUTO_BACKUP_DEBOUNCE_MS = 800L
+        private const val PREFS_NAME = "taskflow_user_prefs"
+        private const val KEY_SHOW_DAILY_PROGRESS = "show_daily_progress"
+    }
+
+    private val userPrefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private val _showDailyProgress = MutableStateFlow(
+        userPrefs?.getBoolean(KEY_SHOW_DAILY_PROGRESS, true) ?: true
+    )
+    val showDailyProgress: StateFlow<Boolean> = _showDailyProgress.asStateFlow()
+
+    fun setShowDailyProgress(show: Boolean) {
+        _showDailyProgress.value = show
+        userPrefs?.edit()?.putBoolean(KEY_SHOW_DAILY_PROGRESS, show)?.apply()
     }
 
     private val driveBackupMutex = Mutex()
@@ -106,6 +123,7 @@ class TaskViewModel(
             userEmail = driveBackupManager.getSignedInAccount()?.email,
             lastBackupTimeFormatted = driveBackupManager.getLastBackupTimeFormatted(),
             lastBackupCount = driveBackupManager.getLastBackupCount(),
+            lastBackupCategoriesCount = driveBackupManager.getLastBackupCategoriesCount(),
             autoBackupEnabled = driveBackupManager.isAutoBackupEnabled()
         )
     )
@@ -131,9 +149,9 @@ class TaskViewModel(
 
             // On app installation: auto-restore from Google Drive if a backup exists
             val restoredResult = driveBackupManager.checkAndAutoRestoreOnInstall()
-            val restoredCount = restoredResult.getOrNull()
-            if (restoredCount != null && restoredCount > 0) {
-                _maintenanceMessage.value = "Restored $restoredCount tasks from Google Drive backup 🎉"
+            val restored = restoredResult.getOrNull()
+            if (restored != null && (restored.taskCount > 0 || restored.categoryCount > 0)) {
+                _maintenanceMessage.value = "Restored ${restored.taskCount} tasks & ${restored.categoryCount} categories from Google Drive backup 🎉"
             } else {
                 val currentTasks = repository.allTasks.first()
                 if (currentTasks.isEmpty()) {
@@ -541,6 +559,7 @@ class TaskViewModel(
             isSyncing = false,
             lastBackupTimeFormatted = driveBackupManager.getLastBackupTimeFormatted(),
             lastBackupCount = driveBackupManager.getLastBackupCount(),
+            lastBackupCategoriesCount = driveBackupManager.getLastBackupCategoriesCount(),
             autoBackupEnabled = driveBackupManager.isAutoBackupEnabled(),
             syncMessage = message,
             isError = isError
@@ -579,9 +598,9 @@ class TaskViewModel(
             try {
                 val result = driveBackupManager.restoreFromDrive()
                 if (result.isSuccess) {
-                    val count = result.getOrThrow()
+                    val res = result.getOrThrow()
                     refreshDriveState(
-                        message = "Successfully restored $count tasks & categories from Google Drive! 🎉",
+                        message = "Restored ${res.taskCount} tasks & ${res.categoryCount} categories from Google Drive! 🎉",
                         isError = false
                     )
                 } else {
@@ -606,10 +625,10 @@ class TaskViewModel(
             val currentTasks = repository.allTasks.first()
             if (currentTasks.isEmpty()) {
                 val result = driveBackupManager.restoreFromDrive()
-                val count = result.getOrNull()
-                if (count != null && count > 0) {
+                val res = result.getOrNull()
+                if (res != null && (res.taskCount > 0 || res.categoryCount > 0)) {
                     refreshDriveState(
-                        message = "Connected as ${account.email} and restored $count tasks from Drive! 🎉",
+                        message = "Connected as ${account.email} and restored ${res.taskCount} tasks & ${res.categoryCount} categories from Drive! 🎉",
                         isError = false
                     )
                 }
@@ -639,9 +658,9 @@ class TaskViewModel(
             try {
                 val result = driveBackupManager.restoreFromJson(jsonString)
                 if (result.isSuccess) {
-                    val count = result.getOrThrow()
+                    val res = result.getOrThrow()
                     refreshDriveState(
-                        message = "Restored $count tasks & categories from backup file! 🎉",
+                        message = "Restored ${res.taskCount} tasks & ${res.categoryCount} categories from backup file! 🎉",
                         isError = false
                     )
                 } else {
@@ -656,12 +675,13 @@ class TaskViewModel(
 
     class Factory(
         private val repository: TaskRepository,
-        private val driveBackupManager: GoogleDriveBackupManager
+        private val driveBackupManager: GoogleDriveBackupManager,
+        private val context: Context? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(TaskViewModel::class.java)) {
-                return TaskViewModel(repository, driveBackupManager) as T
+                return TaskViewModel(repository, driveBackupManager, context) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

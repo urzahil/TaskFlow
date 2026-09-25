@@ -105,6 +105,8 @@ fun SettingsScreen(
     onExportJsonBackup: () -> Unit = {},
     onImportJsonBackup: () -> Unit = {},
     onShareJsonBackup: () -> Unit = {},
+    showDailyProgress: Boolean = true,
+    onToggleDailyProgress: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     BackHandler(onBack = onBack)
@@ -215,105 +217,112 @@ fun SettingsScreen(
         }
 
         // Categories List
-        items(categories, key = { it.name }) { category ->
-            val icon = CategoryIcons.getIcon(category.iconName)
-            val catColor = Color(category.colorHex)
-
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { categoryToEdit = category }
-                    .testTag("category_card_${category.name}")
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
+                categories.forEach { category ->
+                    val icon = CategoryIcons.getIcon(category.iconName)
+                    val catColor = Color(category.colorHex)
+
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { categoryToEdit = category }
+                            .testTag("category_card_${category.name}")
                     ) {
-                        Box(
+                        Row(
                             modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(catColor.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = null,
-                                tint = catColor,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(catColor.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        tint = catColor,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
 
-                        Spacer(modifier = Modifier.width(14.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
 
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = category.name,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                if (category.isDefault) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Surface(
-                                        color = MaterialTheme.colorScheme.primaryContainer,
-                                        shape = RoundedCornerShape(6.dp)
-                                    ) {
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = "Default",
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            fontWeight = FontWeight.Bold
+                                            text = category.name,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (category.isDefault) {
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Surface(
+                                                color = MaterialTheme.colorScheme.primaryContainer,
+                                                shape = RoundedCornerShape(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Default",
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Text(
+                                        text = if (category.isDefault) "Default category • Tap to edit color/icon" else "Custom category • Tap to edit",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // Edit button
+                                IconButton(
+                                    onClick = { categoryToEdit = category },
+                                    modifier = Modifier.testTag("edit_category_${category.name}")
+                                ) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "Edit category ${category.name}",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+                                // Delete button
+                                if (!category.isDefault) {
+                                    IconButton(
+                                        onClick = { categoryToDelete = category },
+                                        modifier = Modifier.testTag("delete_category_${category.name}")
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete category ${category.name}",
+                                            tint = MaterialTheme.colorScheme.error
                                         )
                                     }
                                 }
-                            }
-                            Text(
-                                text = if (category.isDefault) "Default category • Tap to edit color/icon" else "Custom category • Tap to edit",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Edit button
-                        IconButton(
-                            onClick = { categoryToEdit = category },
-                            modifier = Modifier.testTag("edit_category_${category.name}")
-                        ) {
-                            Icon(
-                                Icons.Default.Edit,
-                                contentDescription = "Edit category ${category.name}",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-
-                        // Delete button
-                        if (!category.isDefault) {
-                            IconButton(
-                                onClick = { categoryToDelete = category },
-                                modifier = Modifier.testTag("delete_category_${category.name}")
-                            ) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Delete category ${category.name}",
-                                    tint = MaterialTheme.colorScheme.error
-                                )
                             }
                         }
                     }
@@ -355,6 +364,76 @@ fun SettingsScreen(
                             text = "When you rename a category or change its color, all existing tasks under that category update automatically.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        // Section: Display Preferences
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("display_preferences_card")
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Display Preferences",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onToggleDailyProgress(!showDailyProgress) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Tune,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column {
+                                Text(
+                                    text = "Daily Progress Bar",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Show completion bar and stats in Daily view",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = showDailyProgress,
+                            onCheckedChange = onToggleDailyProgress,
+                            modifier = Modifier.testTag("toggle_daily_progress_switch")
                         )
                     }
                 }
@@ -549,6 +628,24 @@ fun SettingsScreen(
                                     )
                                     Text(
                                         text = "${driveSyncState.lastBackupCount} tasks",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                            if (driveSyncState.lastBackupCategoriesCount > 0) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "Backed up categories:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "${driveSyncState.lastBackupCategoriesCount} categories",
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -911,7 +1008,7 @@ fun SettingsScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "TaskFlow • Version 2.2.1",
+                    text = "TaskFlow • Version 2.2.3",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -993,9 +1090,19 @@ fun SettingsScreen(
             },
             title = { Text("Restore from Drive") },
             text = {
-                Text(
-                    "This will restore all tasks, categories, and completion history from your Google Drive backup. Current tasks and default categories will be replaced with your backup data."
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "This will restore all tasks, categories, and completion history from your Google Drive backup. Current tasks and default categories will be replaced with your backup data."
+                    )
+                    if (driveSyncState.lastBackupCount > 0 || driveSyncState.lastBackupCategoriesCount > 0) {
+                        Text(
+                            text = "Backup contains: ${driveSyncState.lastBackupCount} tasks & ${driveSyncState.lastBackupCategoriesCount} categories",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             },
             confirmButton = {
                 Button(

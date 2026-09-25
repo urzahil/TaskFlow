@@ -24,6 +24,11 @@ data class ParsedBackup(
     val categories: List<CategoryEntity> = emptyList()
 )
 
+data class RestoreResultData(
+    val taskCount: Int,
+    val categoryCount: Int
+)
+
 open class GoogleDriveBackupManager(
     private val context: Context,
     private val repository: TaskRepository
@@ -35,6 +40,7 @@ open class GoogleDriveBackupManager(
         private const val TAG = "DriveBackupManager"
         private const val KEY_LAST_BACKUP_TIME = "last_backup_time"
         private const val KEY_LAST_BACKUP_COUNT = "last_backup_count"
+        private const val KEY_LAST_BACKUP_CATEGORIES_COUNT = "last_backup_categories_count"
         private const val KEY_AUTO_BACKUP = "auto_backup_enabled"
         private const val KEY_HAS_CHECKED_INSTALL_RESTORE = "has_checked_install_restore"
     }
@@ -52,6 +58,8 @@ open class GoogleDriveBackupManager(
     open fun getLastBackupTime(): Long = prefs.getLong(KEY_LAST_BACKUP_TIME, 0L)
 
     open fun getLastBackupCount(): Int = prefs.getInt(KEY_LAST_BACKUP_COUNT, 0)
+
+    open fun getLastBackupCategoriesCount(): Int = prefs.getInt(KEY_LAST_BACKUP_CATEGORIES_COUNT, 0)
 
     fun getLastBackupTimeFormatted(): String? {
         val time = getLastBackupTime()
@@ -231,6 +239,7 @@ open class GoogleDriveBackupManager(
             prefs.edit()
                 .putLong(KEY_LAST_BACKUP_TIME, System.currentTimeMillis())
                 .putInt(KEY_LAST_BACKUP_COUNT, tasks.size)
+                .putInt(KEY_LAST_BACKUP_CATEGORIES_COUNT, categories.size)
                 .apply()
         }
         result
@@ -240,7 +249,7 @@ open class GoogleDriveBackupManager(
      * Restores tasks and custom categories from Google Drive into Room database.
      * Clears existing default categories and sample tasks so only backup data remains.
      */
-    open suspend fun restoreFromDrive(): Result<Int> = withContext(Dispatchers.IO) {
+    open suspend fun restoreFromDrive(): Result<RestoreResultData> = withContext(Dispatchers.IO) {
         val downloadResult = driveService.downloadBackup()
         if (downloadResult.isFailure) {
             return@withContext Result.failure(
@@ -259,10 +268,11 @@ open class GoogleDriveBackupManager(
             prefs.edit()
                 .putLong(KEY_LAST_BACKUP_TIME, System.currentTimeMillis())
                 .putInt(KEY_LAST_BACKUP_COUNT, parsed.tasks.size)
+                .putInt(KEY_LAST_BACKUP_CATEGORIES_COUNT, parsed.categories.size)
                 .putBoolean(KEY_HAS_CHECKED_INSTALL_RESTORE, true)
                 .apply()
 
-            Result.success(parsed.tasks.size)
+            Result.success(RestoreResultData(parsed.tasks.size, parsed.categories.size))
         } catch (e: Exception) {
             Log.e(TAG, "Error restoring backup: ${e.message}", e)
             Result.failure(e)
@@ -273,7 +283,7 @@ open class GoogleDriveBackupManager(
      * Restores tasks and categories from JSON string directly (for local backup import).
      * Clears existing default categories and sample tasks so only backup data remains.
      */
-    suspend fun restoreFromJson(json: String): Result<Int> = withContext(Dispatchers.IO) {
+    suspend fun restoreFromJson(json: String): Result<RestoreResultData> = withContext(Dispatchers.IO) {
         try {
             val parsed = parseBackupJson(json)
             repository.clearAndRestoreAll(
@@ -284,8 +294,9 @@ open class GoogleDriveBackupManager(
             prefs.edit()
                 .putLong(KEY_LAST_BACKUP_TIME, System.currentTimeMillis())
                 .putInt(KEY_LAST_BACKUP_COUNT, parsed.tasks.size)
+                .putInt(KEY_LAST_BACKUP_CATEGORIES_COUNT, parsed.categories.size)
                 .apply()
-            Result.success(parsed.tasks.size)
+            Result.success(RestoreResultData(parsed.tasks.size, parsed.categories.size))
         } catch (e: Exception) {
             Log.e(TAG, "Error restoring from JSON: ${e.message}", e)
             Result.failure(e)
@@ -295,7 +306,7 @@ open class GoogleDriveBackupManager(
     /**
      * Checks if this is a fresh install and auto-restores tasks if a Google Drive backup is found
      */
-    suspend fun checkAndAutoRestoreOnInstall(): Result<Int?> = withContext(Dispatchers.IO) {
+    suspend fun checkAndAutoRestoreOnInstall(): Result<RestoreResultData?> = withContext(Dispatchers.IO) {
         val alreadyChecked = prefs.getBoolean(KEY_HAS_CHECKED_INSTALL_RESTORE, false)
         val currentCount = repository.getTaskCount()
 
@@ -321,8 +332,8 @@ open class GoogleDriveBackupManager(
         Log.i(TAG, "Found Drive backup (${backupInfo.fileId}), auto-restoring tasks...")
         val restoreResult = restoreFromDrive()
         if (restoreResult.isSuccess) {
-            val count = restoreResult.getOrThrow()
-            Result.success(count)
+            val res = restoreResult.getOrThrow()
+            Result.success(res)
         } else {
             Result.failure(restoreResult.exceptionOrNull() ?: Exception("Auto-restore failed"))
         }

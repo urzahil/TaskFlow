@@ -490,7 +490,7 @@ fun TaskAddEditSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 categoryOptions.forEach { cat ->
                     val selected = selectedCategory == cat.name
