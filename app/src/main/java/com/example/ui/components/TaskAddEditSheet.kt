@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Home
@@ -48,6 +49,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -159,9 +161,25 @@ fun TaskAddEditSheet(
 
     var isRecurring by remember { mutableStateOf(existingTask?.isRecurring ?: false) }
     var recurrenceDays by remember { mutableIntStateOf(existingTask?.recurrenceDays ?: 1) }
+    var isDaysOfWeekMode by remember {
+        mutableStateOf(!existingTask?.recurrenceDaysOfWeek.isNullOrBlank())
+    }
+    var selectedDaysOfWeek by remember {
+        mutableStateOf(
+            if (!existingTask?.recurrenceDaysOfWeek.isNullOrBlank()) {
+                existingTask!!.recurrenceDaysOfWeek!!.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+            } else {
+                setOf(
+                    existingTask?.let {
+                        try { AppDate.parseIso(it.startDate).dayOfWeek() } catch (_: Exception) { initialDate.dayOfWeek() }
+                    } ?: initialDate.dayOfWeek()
+                )
+            }
+        )
+    }
     var customDaysText by remember {
         mutableStateOf(
-            if (existingTask != null && RECURRENCE_PRESETS.none { it.first == existingTask.recurrenceDays }) {
+            if (existingTask != null && !isDaysOfWeekMode && existingTask.recurrenceDays != 1 && existingTask.recurrenceDays != 7) {
                 existingTask.recurrenceDays.toString()
             } else ""
         )
@@ -264,7 +282,7 @@ fun TaskAddEditSheet(
                     shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
                     icon = {}
                 ) {
-                    Text("Simple (One-time)")
+                    Text("One-Time")
                 }
                 SegmentedButton(
                     selected = isRecurring,
@@ -340,7 +358,7 @@ fun TaskAddEditSheet(
 
                         // Quick presets chips
                         Text(
-                            text = "Repeat every:",
+                            text = "Repeat pattern:",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -351,46 +369,171 @@ fun TaskAddEditSheet(
                                 .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            RECURRENCE_PRESETS.forEach { (days, label) ->
-                                val selected = recurrenceDays == days && customDaysText.isEmpty()
-                                FilterChip(
-                                    selected = selected,
-                                    onClick = {
-                                        recurrenceDays = days
-                                        customDaysText = ""
-                                    },
-                                    label = { Text(label) },
-                                    leadingIcon = if (selected) {
-                                        { Icon(Icons.Default.Repeat, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                                    } else null
-                                )
-                            }
+                            // 1. Daily
+                            val isDaily = !isDaysOfWeekMode && recurrenceDays == 1 && customDaysText.isEmpty()
+                            FilterChip(
+                                selected = isDaily,
+                                onClick = {
+                                    isDaysOfWeekMode = false
+                                    recurrenceDays = 1
+                                    customDaysText = ""
+                                },
+                                label = { Text("Daily") },
+                                leadingIcon = if (isDaily) {
+                                    { Icon(Icons.Default.Repeat, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                } else null,
+                                modifier = Modifier.testTag("recurrence_daily_chip")
+                            )
+
+                            // 2. Weekly
+                            val isWeekly = !isDaysOfWeekMode && recurrenceDays == 7 && customDaysText.isEmpty()
+                            FilterChip(
+                                selected = isWeekly,
+                                onClick = {
+                                    isDaysOfWeekMode = false
+                                    recurrenceDays = 7
+                                    customDaysText = ""
+                                },
+                                label = { Text("Weekly") },
+                                leadingIcon = if (isWeekly) {
+                                    { Icon(Icons.Default.Repeat, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                } else null,
+                                modifier = Modifier.testTag("recurrence_weekly_chip")
+                            )
+
+                            // 3. Days
+                            FilterChip(
+                                selected = isDaysOfWeekMode,
+                                onClick = {
+                                    isDaysOfWeekMode = true
+                                    customDaysText = ""
+                                    if (selectedDaysOfWeek.isEmpty()) {
+                                        selectedDaysOfWeek = setOf(startDate.dayOfWeek())
+                                    }
+                                },
+                                label = { Text("Days") },
+                                leadingIcon = if (isDaysOfWeekMode) {
+                                    { Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                } else null,
+                                modifier = Modifier.testTag("recurrence_days_of_week_chip")
+                            )
                         }
 
-                        // Custom n days input
-                        OutlinedTextField(
-                            value = customDaysText,
-                            onValueChange = { input ->
-                                val cleaned = input.filter { it.isDigit() }
-                                customDaysText = cleaned
-                                cleaned.toIntOrNull()?.let { days ->
-                                    if (days > 0) recurrenceDays = days
-                                }
-                            },
-                            label = { Text("Or custom interval (every N days)") },
-                            placeholder = { Text("e.g. 4, 5, 10") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp)
-                        )
+                        if (isDaysOfWeekMode) {
+                            // Days of week selector card
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    text = "Select days of the week (repeats weekly):",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
 
-                        Text(
-                            text = "⚡ Will occur every $recurrenceDays day${if (recurrenceDays > 1) "s" else ""}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium
-                        )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val daysList = listOf(1, 2, 3, 4, 5, 6, 7)
+                                    val dayInitialLetters = listOf("M", "T", "W", "T", "F", "S", "S")
+                                    daysList.forEachIndexed { index, dow ->
+                                        val isSelected = selectedDaysOfWeek.contains(dow)
+                                        Box(
+                                            modifier = Modifier
+                                                .size(34.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    if (isSelected) MaterialTheme.colorScheme.primary
+                                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                                )
+                                                .clickable {
+                                                    selectedDaysOfWeek = if (isSelected) {
+                                                        if (selectedDaysOfWeek.size > 1) selectedDaysOfWeek - dow else selectedDaysOfWeek
+                                                    } else {
+                                                        selectedDaysOfWeek + dow
+                                                    }
+                                                }
+                                                .testTag("dow_chip_$dow"),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = dayInitialLetters[index],
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                                                else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Quick presets
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    SuggestionChip(
+                                        onClick = { selectedDaysOfWeek = setOf(1, 2, 3, 4, 5) },
+                                        label = { Text("Weekdays", style = MaterialTheme.typography.labelSmall) }
+                                    )
+                                    SuggestionChip(
+                                        onClick = { selectedDaysOfWeek = setOf(6, 7) },
+                                        label = { Text("Weekends", style = MaterialTheme.typography.labelSmall) }
+                                    )
+                                }
+                            }
+
+                            val daysSummary = remember(selectedDaysOfWeek) {
+                                val sorted = selectedDaysOfWeek.sorted()
+                                when {
+                                    sorted.size == 7 -> "Every day of the week"
+                                    sorted == listOf(1, 2, 3, 4, 5) -> "Weekdays (Mon - Fri)"
+                                    sorted == listOf(6, 7) -> "Weekends (Sat & Sun)"
+                                    else -> sorted.joinToString(", ") { AppDate.dayOfWeekShort(it) }
+                                }
+                            }
+
+                            Text(
+                                text = "⚡ Repeats weekly on: $daysSummary",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        } else {
+                            // Custom n days input
+                            OutlinedTextField(
+                                value = customDaysText,
+                                onValueChange = { input ->
+                                    val cleaned = input.filter { it.isDigit() }
+                                    customDaysText = cleaned
+                                    cleaned.toIntOrNull()?.let { days ->
+                                        if (days > 0) recurrenceDays = days
+                                    }
+                                },
+                                label = { Text("Or custom interval (every N days)") },
+                                placeholder = { Text("e.g. 3, 4, 10") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+
+                            Text(
+                                text = "⚡ Will occur every $recurrenceDays day${if (recurrenceDays > 1) "s" else ""}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
 
                         // Start date for recurring
                         Row(
@@ -563,6 +706,10 @@ fun TaskAddEditSheet(
 
                 Button(
                     onClick = {
+                        val selectedDaysString = if (isDaysOfWeekMode && selectedDaysOfWeek.isNotEmpty()) {
+                            selectedDaysOfWeek.sorted().joinToString(",")
+                        } else null
+
                         val taskToSave = (existingTask ?: TaskEntity(
                             title = title.trim(),
                             startDate = startDate.toIsoString()
@@ -573,7 +720,10 @@ fun TaskAddEditSheet(
                             priority = priority,
                             colorHex = selectedColor,
                             isRecurring = isRecurring,
-                            recurrenceDays = if (isRecurring) recurrenceDays.coerceAtLeast(1) else 1,
+                            recurrenceDays = if (isRecurring) {
+                                if (isDaysOfWeekMode) 7 else recurrenceDays.coerceAtLeast(1)
+                            } else 1,
+                            recurrenceDaysOfWeek = if (isRecurring) selectedDaysString else null,
                             startDate = startDate.toIsoString(),
                             endDate = if (isRecurring && hasEndDate) endDate.toIsoString() else null
                         )

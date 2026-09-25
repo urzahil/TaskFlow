@@ -62,4 +62,46 @@ class TaskRecurrenceTest {
         assertTrue(task.startDate == AppDate(2026, 9, 24).toIsoString())
         assertFalse(task.startDate == AppDate(2026, 9, 25).toIsoString())
     }
+
+    @Test
+    fun testDaysOfWeekRecurrence() {
+        // Monday (1), Wednesday (3), Friday (5)
+        val selectedDays = setOf(1, 3, 5)
+        val task = TaskEntity(
+            id = 3,
+            title = "Gym workout",
+            isRecurring = true,
+            recurrenceDays = 7,
+            recurrenceDaysOfWeek = "1,3,5",
+            startDate = "2026-09-21" // Sep 21 2026 is Monday (1)
+        )
+
+        val mon = AppDate(2026, 9, 21) // Monday -> 1
+        val tue = AppDate(2026, 9, 22) // Tuesday -> 2
+        val wed = AppDate(2026, 9, 23) // Wednesday -> 3
+        val thu = AppDate(2026, 9, 24) // Thursday -> 4
+        val fri = AppDate(2026, 9, 25) // Friday -> 5
+        val sat = AppDate(2026, 9, 26) // Saturday -> 6
+        val sun = AppDate(2026, 9, 27) // Sunday -> 7
+        val nextMon = AppDate(2026, 9, 28) // Next Monday -> 1
+
+        assertEquals(1, mon.dayOfWeek())
+        assertEquals(2, tue.dayOfWeek())
+        assertEquals(3, wed.dayOfWeek())
+        assertEquals(4, thu.dayOfWeek())
+        assertEquals(5, fri.dayOfWeek())
+        assertEquals(6, sat.dayOfWeek())
+        assertEquals(7, sun.dayOfWeek())
+        assertEquals(1, nextMon.dayOfWeek())
+
+        val taskDays = task.recurrenceDaysOfWeek!!.split(",").map { it.toInt() }.toSet()
+        assertTrue(mon.dayOfWeek() in taskDays)
+        assertFalse(tue.dayOfWeek() in taskDays)
+        assertTrue(wed.dayOfWeek() in taskDays)
+        assertFalse(thu.dayOfWeek() in taskDays)
+        assertTrue(fri.dayOfWeek() in taskDays)
+        assertFalse(sat.dayOfWeek() in taskDays)
+        assertFalse(sun.dayOfWeek() in taskDays)
+        assertTrue(nextMon.dayOfWeek() in taskDays)
+    }
 }

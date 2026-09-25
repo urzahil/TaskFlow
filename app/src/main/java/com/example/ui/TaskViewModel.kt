@@ -269,6 +269,7 @@ class TaskViewModel(
         val colorHex: Long,
         val isRecurring: Boolean,
         val recurrenceDays: Int,
+        val recurrenceDaysOfWeek: Set<Int>?,
         val startDate: AppDate,
         val endDate: AppDate?
     )
@@ -304,12 +305,16 @@ class TaskViewModel(
             } else null
 
             val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
+            val daysOfWeekSet = if (!task.recurrenceDaysOfWeek.isNullOrBlank()) {
+                task.recurrenceDaysOfWeek.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+            } else null
 
             ParsedTaskSchedule(
                 id = task.id,
                 colorHex = task.colorHex,
                 isRecurring = task.isRecurring,
                 recurrenceDays = interval,
+                recurrenceDaysOfWeek = daysOfWeekSet,
                 startDate = start,
                 endDate = end
             )
@@ -332,6 +337,8 @@ class TaskViewModel(
                         false
                     } else if (task.endDate != null && date > task.endDate) {
                         false
+                    } else if (!task.recurrenceDaysOfWeek.isNullOrEmpty()) {
+                        task.recurrenceDaysOfWeek.contains(date.dayOfWeek())
                     } else {
                         date.daysBetween(task.startDate) % task.recurrenceDays == 0L
                     }

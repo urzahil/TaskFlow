@@ -96,6 +96,7 @@ open class GoogleDriveBackupManager(
                 put("colorHex", task.colorHex)
                 put("isRecurring", task.isRecurring)
                 put("recurrenceDays", task.recurrenceDays)
+                put("recurrenceDaysOfWeek", task.recurrenceDaysOfWeek ?: JSONObject.NULL)
                 put("startDate", task.startDate)
                 put("endDate", task.endDate ?: JSONObject.NULL)
                 put("createdAt", task.createdAt)
@@ -144,6 +145,7 @@ open class GoogleDriveBackupManager(
             for (i in 0 until tasksArray.length()) {
                 val obj = tasksArray.getJSONObject(i)
                 val endDate = if (obj.isNull("endDate")) null else obj.optString("endDate", null)
+                val recurrenceDaysOfWeek = if (obj.isNull("recurrenceDaysOfWeek")) null else obj.optString("recurrenceDaysOfWeek", null)
                 val task = TaskEntity(
                     id = obj.optLong("id", System.currentTimeMillis() + i),
                     title = obj.getString("title"),
@@ -153,6 +155,7 @@ open class GoogleDriveBackupManager(
                     colorHex = obj.optLong("colorHex", 0xFF6750A4),
                     isRecurring = obj.optBoolean("isRecurring", false),
                     recurrenceDays = obj.optInt("recurrenceDays", 1),
+                    recurrenceDaysOfWeek = recurrenceDaysOfWeek,
                     startDate = obj.optString("startDate", AppDate.today().toIsoString()),
                     endDate = endDate,
                     createdAt = obj.optLong("createdAt", System.currentTimeMillis())

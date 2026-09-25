@@ -153,16 +153,31 @@ class TaskRepository(private val taskDao: TaskDao) {
 
             // If start date is before today, delete old occurrences by moving start date to the first occurrence on or after today
             if (start < today) {
-                val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
-                val diffDays = today.daysBetween(start)
-                val remainder = diffDays % interval
-                val daysToNext = if (remainder == 0L) 0L else (interval - remainder)
-                val nextOccurrence = today.plusDays(daysToNext)
+                val nextOccurrence: AppDate
+                if (!task.recurrenceDaysOfWeek.isNullOrBlank()) {
+                    val selectedDays = task.recurrenceDaysOfWeek.split(",")
+                        .mapNotNull { it.trim().toIntOrNull() }
+                        .toSet()
+                    var candidate = today
+                    if (selectedDays.isNotEmpty()) {
+                        while (candidate.dayOfWeek() !in selectedDays) {
+                            candidate = candidate.plusDays(1)
+                        }
+                    }
+                    nextOccurrence = candidate
+                    cleanedRecurringOccurrences++
+                } else {
+                    val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
+                    val diffDays = today.daysBetween(start)
+                    val remainder = diffDays % interval
+                    val daysToNext = if (remainder == 0L) 0L else (interval - remainder)
+                    nextOccurrence = today.plusDays(daysToNext)
 
-                // Count past occurrences being removed
-                val pastDaysCount = today.minusDays(1).daysBetween(start)
-                if (pastDaysCount >= 0) {
-                    cleanedRecurringOccurrences += (pastDaysCount / interval + 1).toInt()
+                    // Count past occurrences being removed
+                    val pastDaysCount = today.minusDays(1).daysBetween(start)
+                    if (pastDaysCount >= 0) {
+                        cleanedRecurringOccurrences += (pastDaysCount / interval + 1).toInt()
+                    }
                 }
 
                 // If next occurrence is past optional end date, recurring task is completed
@@ -223,6 +238,16 @@ class TaskRepository(private val taskDao: TaskDao) {
             }
             if (end != null && targetDate > end) {
                 return false
+            }
+        }
+
+        // If specific days of the week are selected, check if targetDate falls on one of them
+        if (!task.recurrenceDaysOfWeek.isNullOrBlank()) {
+            val selectedDays = task.recurrenceDaysOfWeek.split(",")
+                .mapNotNull { it.trim().toIntOrNull() }
+                .toSet()
+            if (selectedDays.isNotEmpty()) {
+                return targetDate.dayOfWeek() in selectedDays
             }
         }
 

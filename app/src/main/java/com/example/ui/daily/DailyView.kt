@@ -578,7 +578,7 @@ fun TaskCardItem(
                                 )
                                 Spacer(modifier = Modifier.width(3.dp))
                                 Text(
-                                    text = if (task.recurrenceDays == 1) "Daily" else "Every ${task.recurrenceDays}d",
+                                    text = formatRecurrenceLabel(task),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -632,4 +632,19 @@ fun TaskCardItem(
             }
         }
     }
+}
+
+private fun formatRecurrenceLabel(task: TaskEntity): String {
+    if (!task.recurrenceDaysOfWeek.isNullOrBlank()) {
+        val days = task.recurrenceDaysOfWeek.split(",")
+            .mapNotNull { it.trim().toIntOrNull() }
+            .sorted()
+        return when {
+            days.size == 7 -> "Daily"
+            days == listOf(1, 2, 3, 4, 5) -> "Weekdays"
+            days == listOf(6, 7) -> "Weekends"
+            else -> days.joinToString(", ") { AppDate.dayOfWeekShort(it) }
+        }
+    }
+    return if (task.recurrenceDays == 1) "Daily" else if (task.recurrenceDays == 7) "Weekly" else "Every ${task.recurrenceDays}d"
 }
