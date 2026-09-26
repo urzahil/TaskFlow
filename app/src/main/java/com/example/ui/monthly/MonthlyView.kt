@@ -118,21 +118,21 @@ fun MonthlyView(
         modifier = modifier
             .fillMaxSize()
             .testTag("monthly_view_container"),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 80.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // Month Navigation Header Card
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(14.dp)
+                        .padding(10.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -152,7 +152,7 @@ fun MonthlyView(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "${AppDate.monthName(month)} $year",
-                                style = MaterialTheme.typography.titleLarge,
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -169,7 +169,7 @@ fun MonthlyView(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     // Days of week header (Mon - Sun)
                     Row(
@@ -181,14 +181,14 @@ fun MonthlyView(
                                 text = dow,
                                 modifier = Modifier.weight(1f),
                                 textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.labelMedium,
+                                style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     // Calendar Grid (rows of 7 days)
                     val rows = calendarDays.chunked(7)
@@ -196,7 +196,7 @@ fun MonthlyView(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 2.dp),
+                                .padding(vertical = 1.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             week.forEach { date ->
@@ -228,13 +228,13 @@ fun MonthlyView(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
                     ),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .padding(10.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -266,17 +266,17 @@ fun MonthlyView(
 
                             OutlinedButton(
                                 onClick = onSwitchToDailyView,
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.testTag("open_daily_view_button")
                             ) {
                                 Icon(
                                     Icons.Default.EditCalendar,
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(15.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Open Day", fontSize = 12.sp)
+                                Text("Open Day", fontSize = 11.5.sp)
                             }
                         }
                     }
@@ -289,12 +289,12 @@ fun MonthlyView(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 16.dp),
+                            .padding(vertical = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "No tasks for ${selectedDate.day} ${AppDate.monthName(selectedDate.month)}. Tap Open Day to schedule a task or view details.",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
@@ -348,10 +348,10 @@ fun CalendarDayCell(
         else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
     }
 
-    val cellShape = RoundedCornerShape(8.dp)
+    val cellShape = RoundedCornerShape(6.dp)
     var cellModifier = modifier
-        .padding(1.5.dp)
-        .aspectRatio(0.95f)
+        .padding(1.dp)
+        .aspectRatio(1.05f)
         .clip(cellShape)
         .background(cellBackground)
 
@@ -371,19 +371,19 @@ fun CalendarDayCell(
         ) {
             Text(
                 text = date.day.toString(),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
                 fontWeight = if (isSelected || isToday || hasTasks) FontWeight.Bold else FontWeight.Normal,
                 color = textColor
             )
 
             // Highlighting days with something on!
             if (hasTasks) {
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(1.dp))
                 if (allCompleted) {
                     // Small green check badge
                     Box(
                         modifier = Modifier
-                            .size(10.dp)
+                            .size(9.dp)
                             .clip(CircleShape)
                             .background(CompletedGreen),
                         contentAlignment = Alignment.Center
@@ -392,7 +392,7 @@ fun CalendarDayCell(
                             Icons.Default.Check,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(8.dp)
+                            modifier = Modifier.size(7.dp)
                         )
                     }
                 } else {
@@ -401,24 +401,24 @@ fun CalendarDayCell(
                     if (count > 0) {
                         Surface(
                             color = MaterialTheme.colorScheme.primary,
-                            shape = RoundedCornerShape(6.dp)
+                            shape = RoundedCornerShape(5.dp)
                         ) {
                             Text(
                                 text = count.toString(),
-                                modifier = Modifier.padding(horizontal = 3.dp, vertical = 0.5.dp),
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                modifier = Modifier.padding(horizontal = 2.5.dp, vertical = 0.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.5.sp),
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
                         }
                     } else {
                         // All tasks completed fallback
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
             } else {
                 // Keep layout balanced
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
     }

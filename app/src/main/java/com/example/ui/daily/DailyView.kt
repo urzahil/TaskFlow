@@ -108,8 +108,8 @@ fun DailyView(
         modifier = modifier
             .fillMaxSize()
             .testTag("daily_view_list"),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 80.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // Date Navigator Header
         item {
@@ -118,13 +118,13 @@ fun DailyView(
                     containerColor = MaterialTheme.colorScheme.surface
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp)
+                        .padding(10.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -156,14 +156,14 @@ fun DailyView(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 if (isToday) {
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Surface(
                                         color = MaterialTheme.colorScheme.primaryContainer,
-                                        shape = RoundedCornerShape(8.dp)
+                                        shape = RoundedCornerShape(6.dp)
                                     ) {
                                         Text(
                                             text = "TODAY",
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -173,7 +173,7 @@ fun DailyView(
                             }
                             Text(
                                 text = selectedDate.formatEuropean(includeYear = true),
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -189,7 +189,7 @@ fun DailyView(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     // 7-day quick horizontal strip (-3 to +3 days from selected)
                     val daysStrip = remember(selectedDate) {
@@ -233,10 +233,10 @@ fun DailyView(
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(RoundedCornerShape(10.dp))
                                     .background(containerColor)
                                     .clickable { onDateSelect(stripDate) }
-                                    .padding(vertical = 8.dp, horizontal = 7.dp)
+                                    .padding(vertical = 5.dp, horizontal = 5.dp)
                             ) {
                                 Text(
                                     text = AppDate.dayOfWeekShort(stripDate.dayOfWeek()).take(2),
@@ -251,12 +251,12 @@ fun DailyView(
                                     fontWeight = if (isSelected || isStripToday) FontWeight.Bold else FontWeight.Medium,
                                     color = contentColor
                                 )
-                                Spacer(modifier = Modifier.height(3.dp))
+                                Spacer(modifier = Modifier.height(2.dp))
                                 if (hasTasks) {
                                     if (allCompleted) {
                                         Box(
                                             modifier = Modifier
-                                                .size(12.dp)
+                                                .size(11.dp)
                                                 .clip(CircleShape)
                                                 .background(if (isSelected) MaterialTheme.colorScheme.onPrimary else CompletedGreen),
                                             contentAlignment = Alignment.Center
@@ -265,27 +265,27 @@ fun DailyView(
                                                 Icons.Default.Check,
                                                 contentDescription = null,
                                                 tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.White,
-                                                modifier = Modifier.size(9.dp)
+                                                modifier = Modifier.size(8.dp)
                                             )
                                         }
                                     } else if (pendingCount > 0) {
                                         Surface(
                                             color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
-                                            shape = RoundedCornerShape(6.dp)
+                                            shape = RoundedCornerShape(5.dp)
                                         ) {
                                             Text(
                                                 text = pendingCount.toString(),
-                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.5.dp),
-                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                                modifier = Modifier.padding(horizontal = 3.5.dp, vertical = 0.5.dp),
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
                                                 fontWeight = FontWeight.Bold,
                                                 color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onPrimary
                                             )
                                         }
                                     } else {
-                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Spacer(modifier = Modifier.height(11.dp))
                                     }
                                 } else {
-                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Spacer(modifier = Modifier.height(11.dp))
                                 }
                             }
                         }
@@ -301,13 +301,13 @@ fun DailyView(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     ),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth().testTag("daily_progress_card")
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .padding(12.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -329,7 +329,7 @@ fun DailyView(
                                     } else {
                                         "${stats.completed} of ${stats.total} completed (${(stats.progress * 100).toInt()}%)"
                                     },
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
@@ -339,12 +339,12 @@ fun DailyView(
                                     Icons.Default.CheckCircle,
                                     contentDescription = "Completed",
                                     tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         val animatedProgress by animateFloatAsState(
                             targetValue = stats.progress,
                             label = "daily_progress"
@@ -352,8 +352,8 @@ fun DailyView(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp))
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
                                 .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f))
                         ) {
                             if (animatedProgress > 0f) {
@@ -361,7 +361,7 @@ fun DailyView(
                                     modifier = Modifier
                                         .fillMaxWidth(animatedProgress.coerceIn(0f, 1f))
                                         .fillMaxHeight()
-                                        .clip(RoundedCornerShape(4.dp))
+                                        .clip(RoundedCornerShape(3.dp))
                                         .background(MaterialTheme.colorScheme.primary)
                                 )
                             }
@@ -375,7 +375,7 @@ fun DailyView(
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 TaskFilter.values().forEach { filter ->
                     FilterChip(
@@ -390,13 +390,12 @@ fun DailyView(
                                 }
                             )
                         },
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.testTag("filter_${filter.name.lowercase()}")
                     )
                 }
             }
         }
-
         // Empty state if list is empty
         if (tasks.isEmpty()) {
             item {
@@ -404,16 +403,16 @@ fun DailyView(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surface
                     ),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 24.dp)
+                        .padding(vertical = 12.dp)
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(28.dp),
+                            .padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
@@ -421,25 +420,25 @@ fun DailyView(
                             Icons.Default.TaskAlt,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                            modifier = Modifier.size(48.dp)
+                            modifier = Modifier.size(36.dp)
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = when (currentFilter) {
                                 TaskFilter.ALL -> "No tasks scheduled for this day"
                                 TaskFilter.PENDING -> "No pending tasks for this day"
                                 TaskFilter.COMPLETED -> "No completed tasks yet"
                             },
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(3.dp))
                         Text(
                             text = "Add simple tasks or set up recurring habits that repeat every N days.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp)
+                            modifier = Modifier.padding(horizontal = 12.dp)
                         )
                     }
                 }
@@ -491,7 +490,7 @@ fun TaskCardItem(
                 MaterialTheme.colorScheme.surface
             }
         ),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         border = cardBorder,
         modifier = modifier
             .fillMaxWidth()
@@ -500,14 +499,14 @@ fun TaskCardItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(horizontal = 12.dp, vertical = 9.dp),
             verticalAlignment = Alignment.Top
         ) {
             // Custom Animated Checkbox
             Box(
                 modifier = Modifier
-                    .padding(top = 2.dp)
-                    .size(28.dp)
+                    .padding(top = 1.dp)
+                    .size(24.dp)
                     .clip(CircleShape)
                     .background(
                         if (taskItem.isCompleted) MaterialTheme.colorScheme.primary else Color.Transparent
@@ -521,19 +520,19 @@ fun TaskCardItem(
                         Icons.Default.Check,
                         contentDescription = "Completed",
                         tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 } else {
                     Icon(
                         Icons.Default.RadioButtonUnchecked,
                         contentDescription = "Mark Complete",
                         tint = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
             // Task Content
             Column(
@@ -558,7 +557,7 @@ fun TaskCardItem(
 
                 // Description (if present)
                 if (task.description.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = task.description,
                         style = MaterialTheme.typography.bodySmall,
@@ -568,22 +567,22 @@ fun TaskCardItem(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(5.dp))
 
                 // Badges Row: Category, Priority, Recurrence
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     // Category Badge
                     Surface(
                         color = Color(task.colorHex).copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(6.dp)
+                        shape = RoundedCornerShape(5.dp)
                     ) {
                         Text(
                             text = task.category,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Medium,
                             color = Color(task.colorHex)
@@ -593,11 +592,11 @@ fun TaskCardItem(
                     // Priority Badge
                     Surface(
                         color = priorityColor.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(6.dp)
+                        shape = RoundedCornerShape(5.dp)
                     ) {
                         Text(
                             text = task.priority,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Medium,
                             color = priorityColor
@@ -608,16 +607,16 @@ fun TaskCardItem(
                     if (task.isRecurring) {
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
-                            shape = RoundedCornerShape(6.dp)
+                            shape = RoundedCornerShape(5.dp)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
                                     Icons.Default.Repeat,
                                     contentDescription = "Recurring",
-                                    modifier = Modifier.size(12.dp),
+                                    modifier = Modifier.size(11.dp),
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                                 Spacer(modifier = Modifier.width(3.dp))
