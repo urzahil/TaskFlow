@@ -198,7 +198,7 @@ fun DailyView(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         daysStrip.forEach { stripDate ->
                             val isSelected = stripDate == selectedDate
@@ -209,83 +209,92 @@ fun DailyView(
                             val pendingCount = summary?.pendingTasks ?: 0
 
                             val containerColor by animateColorAsState(
-                                targetValue = if (isSelected) {
-                                    MaterialTheme.colorScheme.primary
-                                } else if (isStripToday) {
-                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                                } else {
-                                    Color.Transparent
+                                targetValue = when {
+                                    isSelected -> MaterialTheme.colorScheme.primary
+                                    isStripToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                                    else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
                                 },
                                 label = "strip_container"
                             )
 
                             val contentColor by animateColorAsState(
-                                targetValue = if (isSelected) {
-                                    MaterialTheme.colorScheme.onPrimary
-                                } else if (isStripToday) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
+                                targetValue = when {
+                                    isSelected -> MaterialTheme.colorScheme.onPrimary
+                                    isStripToday -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.onSurface
                                 },
                                 label = "strip_content"
                             )
 
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
+                            val boxBorder = when {
+                                isSelected -> null
+                                isStripToday -> BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
+                                else -> BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = containerColor,
+                                border = boxBorder,
                                 modifier = Modifier
+                                    .weight(1f)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(containerColor)
                                     .clickable { onDateSelect(stripDate) }
-                                    .padding(vertical = 5.dp, horizontal = 5.dp)
                             ) {
-                                Text(
-                                    text = AppDate.dayOfWeekShort(stripDate.dayOfWeek()).take(2),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = contentColor
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = stripDate.day.toString(),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = if (isSelected || isStripToday) FontWeight.Bold else FontWeight.Medium,
-                                    color = contentColor
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                if (hasTasks) {
-                                    if (allCompleted) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(11.dp)
-                                                .clip(CircleShape)
-                                                .background(if (isSelected) MaterialTheme.colorScheme.onPrimary else CompletedGreen),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.White,
-                                                modifier = Modifier.size(8.dp)
-                                            )
-                                        }
-                                    } else if (pendingCount > 0) {
-                                        Surface(
-                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
-                                            shape = RoundedCornerShape(5.dp)
-                                        ) {
-                                            Text(
-                                                text = pendingCount.toString(),
-                                                modifier = Modifier.padding(horizontal = 3.5.dp, vertical = 0.5.dp),
-                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onPrimary
-                                            )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(vertical = 7.dp, horizontal = 2.dp)
+                                ) {
+                                    Text(
+                                        text = AppDate.dayOfWeekShort(stripDate.dayOfWeek()),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = contentColor,
+                                        maxLines = 1
+                                    )
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(
+                                        text = stripDate.day.toString(),
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                                        fontWeight = if (isSelected || isStripToday) FontWeight.Bold else FontWeight.SemiBold,
+                                        color = contentColor
+                                    )
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    if (hasTasks) {
+                                        if (allCompleted) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(13.dp)
+                                                    .clip(CircleShape)
+                                                    .background(if (isSelected) MaterialTheme.colorScheme.onPrimary else CompletedGreen),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Check,
+                                                    contentDescription = null,
+                                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.White,
+                                                    modifier = Modifier.size(9.dp)
+                                                )
+                                            }
+                                        } else if (pendingCount > 0) {
+                                            Surface(
+                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                                                shape = RoundedCornerShape(5.dp)
+                                            ) {
+                                                Text(
+                                                    text = pendingCount.toString(),
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.5.dp),
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onPrimary
+                                                )
+                                            }
+                                        } else {
+                                            Spacer(modifier = Modifier.height(13.dp))
                                         }
                                     } else {
-                                        Spacer(modifier = Modifier.height(11.dp))
+                                        Spacer(modifier = Modifier.height(13.dp))
                                     }
-                                } else {
-                                    Spacer(modifier = Modifier.height(11.dp))
                                 }
                             }
                         }

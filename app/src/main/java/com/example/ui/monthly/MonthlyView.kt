@@ -58,7 +58,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.AppDate
 import com.example.data.model.TaskEntity
-import com.example.ui.daily.TaskCardItem
 import com.example.ui.model.DaySummaryUi
 import com.example.ui.model.TaskItemUi
 import com.example.ui.theme.CompletedGreen
@@ -302,14 +301,90 @@ fun MonthlyView(
                 }
             } else {
                 items(selectedDayTasks, key = { "${it.task.id}_monthly_${it.date.toIsoString()}" }) { taskItem ->
-                    TaskCardItem(
+                    MonthlyTaskRow(
                         taskItem = taskItem,
-                        onToggle = { onToggleTask(taskItem) },
-                        onEdit = { onEditTask(taskItem.task) },
-                        onDelete = { onDeleteTask(taskItem.task) }
+                        onToggle = { onToggleTask(taskItem) }
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun MonthlyTaskRow(
+    taskItem: TaskItemUi,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("monthly_task_item_${taskItem.task.id}"),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (taskItem.isCompleted) {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (taskItem.isCompleted) 0.dp else 1.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggle() }
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onToggle,
+                modifier = Modifier
+                    .size(28.dp)
+                    .testTag("toggle_monthly_task_${taskItem.task.id}")
+            ) {
+                if (taskItem.isCompleted) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = "Completed",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                } else {
+                    Icon(
+                        Icons.Default.RadioButtonUnchecked,
+                        contentDescription = "Mark Complete",
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Text(
+                text = taskItem.task.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (taskItem.isCompleted) FontWeight.Normal else FontWeight.Medium,
+                textDecoration = if (taskItem.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+                color = if (taskItem.isCompleted) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }

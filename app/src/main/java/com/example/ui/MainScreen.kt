@@ -12,13 +12,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Clear
@@ -36,6 +39,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -204,53 +208,76 @@ fun MainScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            Column {
-                TopAppBar(
-                    navigationIcon = {
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+            ) {
+                Column {
+                    // Header row: Title + Actions (with minimized padding)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                start = if (viewMode == ViewMode.SETTINGS) 4.dp else 16.dp,
+                                end = 8.dp,
+                                top = 2.dp,
+                                bottom = 0.dp
+                            ),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         if (viewMode == ViewMode.SETTINGS) {
                             IconButton(
                                 onClick = { viewModel.setViewMode(ViewMode.DAILY) },
-                                modifier = Modifier.testTag("back_from_settings_button")
+                                modifier = Modifier
+                                    .testTag("back_from_settings_button")
+                                    .size(36.dp)
                             ) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.ArrowBack,
                                     contentDescription = "Back to tasks"
                                 )
                             }
+                            Spacer(modifier = Modifier.width(4.dp))
                         }
-                    },
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = if (viewMode == ViewMode.SETTINGS) "Settings" else "TaskFlow",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    },
-                    actions = {
+
+                        Text(
+                            text = if (viewMode == ViewMode.SETTINGS) "Settings" else "TaskFlow",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Spacer(modifier = Modifier.weight(1f))
+
                         if (viewMode == ViewMode.DAILY && selectedDate != currentToday) {
                             IconButton(
                                 onClick = { viewModel.jumpToToday() },
-                                modifier = Modifier.testTag("jump_today_top_button")
+                                modifier = Modifier
+                                    .testTag("jump_today_top_button")
+                                    .size(36.dp)
                             ) {
                                 Icon(
                                     Icons.Default.Today,
                                     contentDescription = "Jump to Today",
-                                    tint = MaterialTheme.colorScheme.primary
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
                         if (viewMode == ViewMode.MONTHLY && (selectedYearMonth.first != currentToday.year || selectedYearMonth.second != currentToday.month)) {
                             IconButton(
                                 onClick = { viewModel.jumpToCurrentMonth() },
-                                modifier = Modifier.testTag("jump_current_month_top_button")
+                                modifier = Modifier
+                                    .testTag("jump_current_month_top_button")
+                                    .size(36.dp)
                             ) {
                                 Icon(
                                     Icons.Default.Today,
                                     contentDescription = "Jump to Current Month",
-                                    tint = MaterialTheme.colorScheme.primary
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
@@ -260,11 +287,14 @@ fun MainScreen(
                                     isSearchActive = !isSearchActive
                                     if (!isSearchActive) viewModel.setSearchQuery("")
                                 },
-                                modifier = Modifier.testTag("search_toggle_button")
+                                modifier = Modifier
+                                    .testTag("search_toggle_button")
+                                    .size(36.dp)
                             ) {
                                 Icon(
                                     if (isSearchActive) Icons.Default.Clear else Icons.Default.Search,
-                                    contentDescription = "Search"
+                                    contentDescription = "Search",
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
@@ -274,83 +304,87 @@ fun MainScreen(
                                     if (viewMode == ViewMode.SETTINGS) ViewMode.DAILY else ViewMode.SETTINGS
                                 )
                             },
-                            modifier = Modifier.testTag("settings_top_button")
+                            modifier = Modifier
+                                .testTag("settings_top_button")
+                                .size(36.dp)
                         ) {
                             Icon(
                                 Icons.Default.Settings,
                                 contentDescription = "Settings",
-                                tint = if (viewMode == ViewMode.SETTINGS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                )
-
-                // Search field row when active (only in task views)
-                if (viewMode != ViewMode.SETTINGS) {
-                    AnimatedVisibility(visible = isSearchActive) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 4.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = searchQuery,
-                                onValueChange = { viewModel.setSearchQuery(it) },
-                                placeholder = { Text("Filter tasks by title, note, or tag...") },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(
-                                    capitalization = KeyboardCapitalization.Sentences
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("search_input_field"),
-                                shape = RoundedCornerShape(12.dp)
+                                tint = if (viewMode == ViewMode.SETTINGS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
 
-                    // View Mode Tabs: Daily View vs Monthly Calendar only
-                    TabRow(
-                        selectedTabIndex = if (viewMode == ViewMode.MONTHLY) 1 else 0,
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.testTag("view_mode_tab_row")
-                    ) {
-                        Tab(
-                            selected = viewMode == ViewMode.DAILY,
-                            onClick = { viewModel.setViewMode(ViewMode.DAILY) },
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.FormatListBulleted,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Daily", fontWeight = FontWeight.SemiBold)
+                    // Search field row when active (only in task views)
+                    if (viewMode != ViewMode.SETTINGS) {
+                        AnimatedVisibility(visible = isSearchActive) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 2.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = searchQuery,
+                                    onValueChange = { viewModel.setSearchQuery(it) },
+                                    placeholder = { Text("Filter tasks by title, note, or tag...") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(
+                                        capitalization = KeyboardCapitalization.Sentences
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("search_input_field"),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                            }
+                        }
+
+                        // View Mode Tabs: Daily View vs Monthly Calendar with reduced padding
+                        TabRow(
+                            selectedTabIndex = if (viewMode == ViewMode.MONTHLY) 1 else 0,
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            contentColor = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.testTag("view_mode_tab_row")
+                        ) {
+                            Tab(
+                                selected = viewMode == ViewMode.DAILY,
+                                onClick = { viewModel.setViewMode(ViewMode.DAILY) },
+                                modifier = Modifier
+                                    .testTag("tab_daily_view")
+                                    .height(36.dp),
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.FormatListBulleted,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Daily", fontWeight = FontWeight.SemiBold)
+                                    }
                                 }
-                            },
-                            modifier = Modifier.testTag("tab_daily_view")
-                        )
-                        Tab(
-                            selected = viewMode == ViewMode.MONTHLY,
-                            onClick = { viewModel.setViewMode(ViewMode.MONTHLY) },
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.CalendarMonth,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Monthly", fontWeight = FontWeight.SemiBold)
+                            )
+                            Tab(
+                                selected = viewMode == ViewMode.MONTHLY,
+                                onClick = { viewModel.setViewMode(ViewMode.MONTHLY) },
+                                modifier = Modifier
+                                    .testTag("tab_monthly_view")
+                                    .height(36.dp),
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.CalendarMonth,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Monthly", fontWeight = FontWeight.SemiBold)
+                                    }
                                 }
-                            },
-                            modifier = Modifier.testTag("tab_monthly_view")
-                        )
+                            )
+                        }
                     }
                 }
             }
