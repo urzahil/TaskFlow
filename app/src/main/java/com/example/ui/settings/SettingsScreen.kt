@@ -533,7 +533,7 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "Hide the preview task list under the calendar in Monthly view",
+                                    text = "Hide the preview task list under the calendar in Monthly view (default is off)",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
