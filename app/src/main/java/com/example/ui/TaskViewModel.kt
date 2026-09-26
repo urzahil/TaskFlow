@@ -63,11 +63,33 @@ class TaskViewModel(
         const val DEFAULT_AUTO_BACKUP_DEBOUNCE_MS = 800L
         private const val PREFS_NAME = "taskflow_user_prefs"
         private const val KEY_SHOW_DAILY_PROGRESS = "show_daily_progress"
+        private const val KEY_IS_DARK_MODE = "is_dark_mode"
+        private const val KEY_HIDE_MONTHLY_TASK_LIST = "hide_monthly_task_list"
         private const val KEY_LAST_ROLLOVER_DATE = "last_rollover_date"
         private const val KEY_LAST_ROLLOVER_TIMESTAMP = "last_rollover_timestamp"
     }
 
     private val userPrefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private val _isDarkMode = MutableStateFlow(
+        userPrefs?.getBoolean(KEY_IS_DARK_MODE, true) ?: true
+    )
+    val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
+
+    fun setDarkMode(enabled: Boolean) {
+        _isDarkMode.value = enabled
+        userPrefs?.edit()?.putBoolean(KEY_IS_DARK_MODE, enabled)?.apply()
+    }
+
+    private val _hideMonthlyTaskList = MutableStateFlow(
+        userPrefs?.getBoolean(KEY_HIDE_MONTHLY_TASK_LIST, false) ?: false
+    )
+    val hideMonthlyTaskList: StateFlow<Boolean> = _hideMonthlyTaskList.asStateFlow()
+
+    fun setHideMonthlyTaskList(hide: Boolean) {
+        _hideMonthlyTaskList.value = hide
+        userPrefs?.edit()?.putBoolean(KEY_HIDE_MONTHLY_TASK_LIST, hide)?.apply()
+    }
 
     private val _showDailyProgress = MutableStateFlow(
         userPrefs?.getBoolean(KEY_SHOW_DAILY_PROGRESS, true) ?: true

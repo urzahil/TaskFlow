@@ -79,6 +79,7 @@ fun MonthlyView(
     onSwitchToDailyView: () -> Unit,
     onAddTaskForDay: () -> Unit,
     currentToday: AppDate = AppDate.today(),
+    hideMonthlyTaskList: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val (year, month) = yearMonth
@@ -258,92 +259,94 @@ fun MonthlyView(
             }
         }
 
-        // Selected Day Details Header & Task List
-        item {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                ),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
+        // Selected Day Details Header & Task List (if not hidden by user preference)
+        if (!hideMonthlyTaskList) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .weight(1f, fill = false)
-                                .padding(end = 8.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Selected Day Overview",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "${AppDate.dayOfWeekName(selectedDate.dayOfWeek())} ${selectedDate.day} ${AppDate.monthName(selectedDate.month)} ${selectedDate.year}",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f, fill = false)
+                                    .padding(end = 8.dp)
+                            ) {
+                                Text(
+                                    text = "Selected Day Overview",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "${AppDate.dayOfWeekName(selectedDate.dayOfWeek())} ${selectedDate.day} ${AppDate.monthName(selectedDate.month)} ${selectedDate.year}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
 
-                        OutlinedButton(
-                            onClick = onSwitchToDailyView,
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.testTag("open_daily_view_button")
-                        ) {
-                            Icon(
-                                Icons.Default.EditCalendar,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Open Day", fontSize = 12.sp)
+                            OutlinedButton(
+                                onClick = onSwitchToDailyView,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.testTag("open_daily_view_button")
+                            ) {
+                                Icon(
+                                    Icons.Default.EditCalendar,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Open Day", fontSize = 12.sp)
+                            }
                         }
                     }
                 }
             }
-        }
 
-        // Preview of tasks on the selected day
-        if (selectedDayTasks.isEmpty()) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No tasks for ${selectedDate.day} ${AppDate.monthName(selectedDate.month)}. Tap Open Day to schedule a task or view details.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
+            // Preview of tasks on the selected day
+            if (selectedDayTasks.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No tasks for ${selectedDate.day} ${AppDate.monthName(selectedDate.month)}. Tap Open Day to schedule a task or view details.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            } else {
+                items(selectedDayTasks, key = { "${it.task.id}_monthly_${it.date.toIsoString()}" }) { taskItem ->
+                    TaskCardItem(
+                        taskItem = taskItem,
+                        onToggle = { onToggleTask(taskItem) },
+                        onEdit = { onEditTask(taskItem.task) },
+                        onDelete = { onDeleteTask(taskItem.task) }
                     )
                 }
-            }
-        } else {
-            items(selectedDayTasks, key = { "${it.task.id}_monthly_${it.date.toIsoString()}" }) { taskItem ->
-                TaskCardItem(
-                    taskItem = taskItem,
-                    onToggle = { onToggleTask(taskItem) },
-                    onEdit = { onEditTask(taskItem.task) },
-                    onDelete = { onDeleteTask(taskItem.task) }
-                )
             }
         }
     }
@@ -431,19 +434,24 @@ fun CalendarDayCell(
                         )
                     }
                 } else {
-                    // Task Count Pill or dot
-                    val count = summary.totalTasks
-                    Surface(
-                        color = MaterialTheme.colorScheme.primary,
-                        shape = RoundedCornerShape(6.dp)
-                    ) {
-                        Text(
-                            text = count.toString(),
-                            modifier = Modifier.padding(horizontal = 3.dp, vertical = 0.5.dp),
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
+                    // Pending task count pill
+                    val count = summary.pendingTasks
+                    if (count > 0) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = count.toString(),
+                                modifier = Modifier.padding(horizontal = 3.dp, vertical = 0.5.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    } else {
+                        // All tasks completed fallback
+                        Spacer(modifier = Modifier.height(10.dp))
                     }
                 }
             } else {

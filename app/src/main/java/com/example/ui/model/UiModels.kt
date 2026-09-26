@@ -15,9 +15,9 @@ data class DaySummaryUi(
     val completedTasks: Int = 0,
     val taskColors: List<Long> = emptyList()
 ) {
-    val hasTasks: Boolean get() = totalTasks > 0
     val pendingTasks: Int get() = (totalTasks - completedTasks).coerceAtLeast(0)
-    val allCompleted: Boolean get() = hasTasks && completedTasks == totalTasks
+    val hasTasks: Boolean get() = totalTasks > 0
+    val allCompleted: Boolean get() = hasTasks && completedTasks >= totalTasks
 }
 
 enum class TaskFilter(val label: String) {

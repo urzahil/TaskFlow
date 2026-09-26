@@ -93,6 +93,8 @@ fun MainScreen(
     val maintenanceMessage by viewModel.maintenanceMessage.collectAsStateWithLifecycle()
     val driveSyncState by viewModel.driveSyncState.collectAsStateWithLifecycle()
     val showDailyProgress by viewModel.showDailyProgress.collectAsStateWithLifecycle()
+    val isDarkMode by viewModel.isDarkMode.collectAsStateWithLifecycle()
+    val hideMonthlyTaskList by viewModel.hideMonthlyTaskList.collectAsStateWithLifecycle()
     val currentToday by viewModel.currentToday.collectAsStateWithLifecycle()
     val lastRolloverInfo by viewModel.lastRolloverInfo.collectAsStateWithLifecycle()
 
@@ -402,7 +404,8 @@ fun MainScreen(
                         onDeleteTask = { viewModel.deleteTask(it) },
                         onSwitchToDailyView = { viewModel.setViewMode(ViewMode.DAILY) },
                         onAddTaskForDay = { viewModel.openAddTaskDialog() },
-                        currentToday = currentToday
+                        currentToday = currentToday,
+                        hideMonthlyTaskList = hideMonthlyTaskList
                     )
                 }
                 ViewMode.SETTINGS -> {
@@ -461,7 +464,11 @@ fun MainScreen(
                             }
                         },
                         showDailyProgress = showDailyProgress,
-                        onToggleDailyProgress = { viewModel.setShowDailyProgress(it) }
+                        onToggleDailyProgress = { viewModel.setShowDailyProgress(it) },
+                        isDarkMode = isDarkMode,
+                        onToggleDarkMode = { viewModel.setDarkMode(it) },
+                        hideMonthlyTaskList = hideMonthlyTaskList,
+                        onToggleHideMonthlyTaskList = { viewModel.setHideMonthlyTaskList(it) }
                     )
                 }
             }
