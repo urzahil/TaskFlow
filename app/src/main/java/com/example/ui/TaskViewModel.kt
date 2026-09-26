@@ -14,6 +14,10 @@ import com.example.ui.model.TaskFilter
 import com.example.ui.model.TaskItemUi
 import com.example.ui.model.ViewMode
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -24,7 +28,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -60,6 +63,8 @@ class TaskViewModel(
         const val DEFAULT_AUTO_BACKUP_DEBOUNCE_MS = 800L
         private const val PREFS_NAME = "taskflow_user_prefs"
         private const val KEY_SHOW_DAILY_PROGRESS = "show_daily_progress"
+        private const val KEY_LAST_ROLLOVER_DATE = "last_rollover_date"
+        private const val KEY_LAST_ROLLOVER_TIMESTAMP = "last_rollover_timestamp"
     }
 
     private val userPrefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -68,6 +73,16 @@ class TaskViewModel(
         userPrefs?.getBoolean(KEY_SHOW_DAILY_PROGRESS, true) ?: true
     )
     val showDailyProgress: StateFlow<Boolean> = _showDailyProgress.asStateFlow()
+
+    private val _currentToday = MutableStateFlow(AppDate.today())
+    val currentToday: StateFlow<AppDate> = _currentToday.asStateFlow()
+
+    private val _lastRolloverInfo = MutableStateFlow<Pair<String, String>?>(
+        userPrefs?.getString(KEY_LAST_ROLLOVER_DATE, null)?.let { date ->
+            Pair(date, userPrefs.getString(KEY_LAST_ROLLOVER_TIMESTAMP, "") ?: "")
+        }
+    )
+    val lastRolloverInfo: StateFlow<Pair<String, String>?> = _lastRolloverInfo.asStateFlow()
 
     fun setShowDailyProgress(show: Boolean) {
         _showDailyProgress.value = show
@@ -80,12 +95,10 @@ class TaskViewModel(
     @Volatile
     private var isAutoBackupPending = false
 
-    private val today = AppDate.today()
-
-    private val _selectedDate = MutableStateFlow(today)
+    private val _selectedDate = MutableStateFlow(_currentToday.value)
     val selectedDate: StateFlow<AppDate> = _selectedDate.asStateFlow()
 
-    private val _selectedYearMonth = MutableStateFlow(Pair(today.year, today.month))
+    private val _selectedYearMonth = MutableStateFlow(Pair(_currentToday.value.year, _currentToday.value.month))
     val selectedYearMonth: StateFlow<Pair<Int, Int>> = _selectedYearMonth.asStateFlow()
 
     private val _viewMode = MutableStateFlow(ViewMode.DAILY)
@@ -161,14 +174,12 @@ class TaskViewModel(
             }
             refreshDriveState()
 
-            // Run startup task to clean old completed tasks and move uncompleted tasks to today
-            runCleanupAndRollover()
-
-            // If a previous auto-backup was pending durable across restart, trigger it now
-            if (driveBackupManager.isBackupPendingDurable()) {
-                triggerAutoBackup(debounceMs = 1500L)
-            }
+            // Run startup check to clean old completed tasks and roll forward tasks to today
+            onAppForegrounded()
         }
+
+        // Lightweight watcher for midnight boundary transition when app is open
+        scheduleMidnightWatcher()
 
         // Serialized auto-backup worker loop
         viewModelScope.launch {
@@ -178,133 +189,107 @@ class TaskViewModel(
         }
     }
 
-    fun runCleanupAndRollover(onComplete: ((Int, Int, Int) -> Unit)? = null) {
+    private var midnightJob: Job? = null
+    private fun scheduleMidnightWatcher() {
+        midnightJob?.cancel()
+        midnightJob = viewModelScope.launch {
+            while (true) {
+                val cal = Calendar.getInstance()
+                cal.add(Calendar.DAY_OF_YEAR, 1)
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 1)
+                cal.set(Calendar.MILLISECOND, 0)
+                val delayMs = (cal.timeInMillis - System.currentTimeMillis()).coerceAtLeast(1000L)
+                delay(delayMs)
+                onAppForegrounded()
+            }
+        }
+    }
+
+    /**
+     * Called whenever the app is brought into foreground or when the system reports date change.
+     * Checks if it is a new day compared to the last recorded rollover.
+     * Uses 0 background battery since it executes only on foreground transition.
+     */
+    fun onAppForegrounded() {
+        val now = AppDate.today()
+        val previousToday = _currentToday.value
+        _currentToday.value = now
+
+        val lastRolloverDateIso = userPrefs?.getString(KEY_LAST_ROLLOVER_DATE, null)
+        val todayIso = now.toIsoString()
+
+        val isNewDay = lastRolloverDateIso != todayIso || previousToday != now
+
+        if (isNewDay) {
+            // Auto-advance selected date if the user was on yesterday's 'today'
+            if (_selectedDate.value == previousToday) {
+                _selectedDate.value = now
+                _selectedYearMonth.value = Pair(now.year, now.month)
+            }
+            runCleanupAndRollover(targetDate = now, isForegroundCheck = true)
+        }
+    }
+
+    fun onDateChanged() {
+        onAppForegrounded()
+    }
+
+    fun runCleanupAndRollover(
+        targetDate: AppDate = AppDate.today(),
+        isForegroundCheck: Boolean = false,
+        onComplete: ((Int, Int, Int) -> Unit)? = null
+    ) {
         viewModelScope.launch {
-            val result = repository.cleanupAndRolloverTasks(today)
+            val result = repository.cleanupAndRolloverTasks(targetDate)
+            val nowTimeFormatted = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
+            userPrefs?.edit()
+                ?.putString(KEY_LAST_ROLLOVER_DATE, targetDate.toIsoString())
+                ?.putString(KEY_LAST_ROLLOVER_TIMESTAMP, nowTimeFormatted)
+                ?.apply()
+            _lastRolloverInfo.value = Pair(targetDate.toIsoString(), nowTimeFormatted)
+
             if (result.cleanedCount > 0 || result.movedCount > 0 || result.cleanedRecurringOccurrences > 0) {
                 val details = mutableListOf<String>()
                 if (result.cleanedCount > 0) details.add("cleaned ${result.cleanedCount} completed task(s)")
                 if (result.movedCount > 0) details.add("moved ${result.movedCount} uncompleted task(s) to today")
                 if (result.cleanedRecurringOccurrences > 0) details.add("removed ${result.cleanedRecurringOccurrences} old recurring occurrence(s)")
                 _maintenanceMessage.value = details.joinToString(", ").replaceFirstChar { it.uppercase() } + "."
+            } else if (!isForegroundCheck) {
+                _maintenanceMessage.value = "Tasks are up to date for today. No rollover needed."
             }
             onComplete?.invoke(result.cleanedCount, result.movedCount, result.cleanedRecurringOccurrences)
         }
     }
 
-    private data class ParsedTaskSchedule(
-        val id: Long,
-        val colorHex: Long,
-        val isRecurring: Boolean,
-        val recurrenceDays: Int,
-        val recurrenceDaysOfWeek: Set<Int>,
-        val startDate: AppDate,
-        val endDate: AppDate?
-    ) {
-        fun isScheduledOn(date: AppDate): Boolean {
-            if (!isRecurring) {
-                return startDate == date
-            }
-            if (date < startDate) return false
-            if (endDate != null && date > endDate) return false
-            if (recurrenceDaysOfWeek.isNotEmpty()) {
-                return recurrenceDaysOfWeek.contains(date.dayOfWeek())
-            }
-            return date.daysBetween(startDate) % recurrenceDays == 0L
-        }
-    }
-
     /**
-     * Pre-parsed tasks for fast scheduling calculations without repeated string parsing or date calculations.
+     * Tasks for the currently selected date.
      */
-    private val parsedTasksState: StateFlow<List<Pair<TaskEntity, ParsedTaskSchedule>>> = repository.allTasks
-        .map { tasks ->
-            tasks.mapNotNull { task ->
-                val start = try {
-                    AppDate.parseIso(task.startDate)
-                } catch (_: Exception) {
-                    null
-                } ?: return@mapNotNull null
-
-                val end = if (!task.endDate.isNullOrBlank()) {
-                    try { AppDate.parseIso(task.endDate) } catch (_: Exception) { null }
-                } else null
-
-                val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
-                val daysOfWeekSet = task.parsedDaysOfWeek()
-
-                val schedule = ParsedTaskSchedule(
-                    id = task.id,
-                    colorHex = task.colorHex,
-                    isRecurring = task.isRecurring,
-                    recurrenceDays = interval,
-                    recurrenceDaysOfWeek = daysOfWeekSet,
-                    startDate = start,
-                    endDate = end
-                )
-                Pair(task, schedule)
-            }
-        }.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-
-    private data class DailyCalculationResult(
-        val items: List<TaskItemUi>,
-        val stats: DailyStats
-    )
-
-    /**
-     * Shared computation of daily scheduled tasks and stats for the selected date.
-     */
-    private val dailyCalculation: StateFlow<DailyCalculationResult> = combine(
-        parsedTasksState,
+    val dailyTasks: StateFlow<List<TaskItemUi>> = combine(
+        repository.allTasks,
         repository.allCompletions,
-        _selectedDate
-    ) { parsedTasks, completions, date ->
+        _selectedDate,
+        _taskFilter,
+        _searchQuery
+    ) { tasks, completions, date, filter, query ->
         val dateIso = date.toIsoString()
         val completedTaskIds = completions
             .filter { it.date == dateIso }
             .map { it.taskId }
             .toSet()
 
-        val scheduledItems = mutableListOf<TaskItemUi>()
-        var completedCount = 0
-
-        for ((task, schedule) in parsedTasks) {
-            if (schedule.isScheduledOn(date)) {
-                val isCompleted = completedTaskIds.contains(task.id)
-                if (isCompleted) completedCount++
-                scheduledItems.add(
-                    TaskItemUi(
-                        task = task,
-                        date = date,
-                        isCompleted = isCompleted
-                    )
-                )
-            }
+        val scheduledTasks = tasks.filter { task ->
+            repository.isTaskScheduledOnDate(task, date)
         }
 
-        DailyCalculationResult(
-            items = scheduledItems,
-            stats = DailyStats(total = scheduledItems.size, completed = completedCount)
-        )
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = DailyCalculationResult(emptyList(), DailyStats())
-    )
-
-    /**
-     * Tasks for the currently selected date with filter & search applied.
-     */
-    val dailyTasks: StateFlow<List<TaskItemUi>> = combine(
-        dailyCalculation,
-        _taskFilter,
-        _searchQuery
-    ) { calculation, filter, query ->
-        val items = calculation.items
+        val items = scheduledTasks.map { task ->
+            TaskItemUi(
+                task = task,
+                date = date,
+                isCompleted = completedTaskIds.contains(task.id)
+            )
+        }
 
         // Apply search query
         val queryFiltered = if (query.isBlank()) {
@@ -332,24 +317,50 @@ class TaskViewModel(
     /**
      * Statistics for the currently selected date (total, completed).
      */
-    val dailyStats: StateFlow<DailyStats> = dailyCalculation
-        .map { it.stats }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = DailyStats()
-        )
+    val dailyStats: StateFlow<DailyStats> = combine(
+        repository.allTasks,
+        repository.allCompletions,
+        _selectedDate
+    ) { tasks, completions, date ->
+        val dateIso = date.toIsoString()
+        val completedTaskIds = completions
+            .filter { it.date == dateIso }
+            .map { it.taskId }
+            .toSet()
+
+        val scheduledTasks = tasks.filter { task ->
+            repository.isTaskScheduledOnDate(task, date)
+        }
+
+        val total = scheduledTasks.size
+        val completed = scheduledTasks.count { completedTaskIds.contains(it.id) }
+        DailyStats(total = total, completed = completed)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = DailyStats()
+    )
+
+    private data class ParsedTaskSchedule(
+        val id: Long,
+        val colorHex: Long,
+        val isRecurring: Boolean,
+        val recurrenceDays: Int,
+        val recurrenceDaysOfWeek: Set<Int>?,
+        val startDate: AppDate,
+        val endDate: AppDate?
+    )
 
     /**
      * Map of Date ISO string to DaySummaryUi for all days in the currently selected month.
-     * Highlighting days with something scheduled while preserving task color ordering!
+     * Highlighting days with something scheduled!
      */
     val monthDaysSummary: StateFlow<Map<String, DaySummaryUi>> = combine(
-        parsedTasksState,
+        repository.allTasks,
         repository.allCompletions,
         _selectedYearMonth,
         _viewMode
-    ) { parsedTasks, completions, (year, month), currentViewMode ->
+    ) { tasks, completions, (year, month), currentViewMode ->
         // Avoid month-summary work when the monthly view is not active
         if (currentViewMode != ViewMode.MONTHLY) {
             return@combine emptyMap<String, DaySummaryUi>()
@@ -358,36 +369,66 @@ class TaskViewModel(
         val daysInMonth = AppDate.daysInMonth(year, month)
         val summaryMap = mutableMapOf<String, DaySummaryUi>()
 
+        // Precompute reusable schedule information once per task update instead of per day
+        val parsedTasks = tasks.mapNotNull { task ->
+            val start = try {
+                AppDate.parseIso(task.startDate)
+            } catch (_: Exception) {
+                null
+            } ?: return@mapNotNull null
+
+            val end = if (!task.endDate.isNullOrBlank()) {
+                try { AppDate.parseIso(task.endDate) } catch (_: Exception) { null }
+            } else null
+
+            val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
+            val daysOfWeekSet = if (!task.recurrenceDaysOfWeek.isNullOrBlank()) {
+                task.recurrenceDaysOfWeek.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+            } else null
+
+            ParsedTaskSchedule(
+                id = task.id,
+                colorHex = task.colorHex,
+                isRecurring = task.isRecurring,
+                recurrenceDays = interval,
+                recurrenceDaysOfWeek = daysOfWeekSet,
+                startDate = start,
+                endDate = end
+            )
+        }
+
         // Pre-group completions by date
         val completionsByDate = completions.groupBy { it.date }
 
-        // Invert iteration: evaluate each day with pre-parsed schedules
         for (day in 1..daysInMonth) {
             val date = AppDate(year, month, day)
             val dateIso = date.toIsoString()
 
             val completedIds = completionsByDate[dateIso]?.map { it.taskId }?.toSet() ?: emptySet()
 
-            var totalTasks = 0
-            var completedCount = 0
-            val colors = mutableListOf<Long>()
-
-            for ((_, schedule) in parsedTasks) {
-                if (schedule.isScheduledOn(date)) {
-                    totalTasks++
-                    if (completedIds.contains(schedule.id)) {
-                        completedCount++
-                    }
-                    if (colors.size < 3) {
-                        colors.add(schedule.colorHex)
+            val scheduledTasks = parsedTasks.filter { task ->
+                if (!task.isRecurring) {
+                    task.startDate == date
+                } else {
+                    if (date < task.startDate) {
+                        false
+                    } else if (task.endDate != null && date > task.endDate) {
+                        false
+                    } else if (!task.recurrenceDaysOfWeek.isNullOrEmpty()) {
+                        task.recurrenceDaysOfWeek.contains(date.dayOfWeek())
+                    } else {
+                        date.daysBetween(task.startDate) % task.recurrenceDays == 0L
                     }
                 }
             }
 
-            if (totalTasks > 0) {
+            if (scheduledTasks.isNotEmpty()) {
+                val completedCount = scheduledTasks.count { completedIds.contains(it.id) }
+                val colors = scheduledTasks.take(3).map { it.colorHex }
+
                 summaryMap[dateIso] = DaySummaryUi(
                     date = date,
-                    totalTasks = totalTasks,
+                    totalTasks = scheduledTasks.size,
                     completedTasks = completedCount,
                     taskColors = colors
                 )
@@ -421,7 +462,9 @@ class TaskViewModel(
     }
 
     fun jumpToToday() {
-        selectDate(AppDate.today())
+        val now = AppDate.today()
+        _currentToday.value = now
+        selectDate(now)
     }
 
     fun nextMonth() {
@@ -444,6 +487,7 @@ class TaskViewModel(
 
     fun jumpToCurrentMonth() {
         val now = AppDate.today()
+        _currentToday.value = now
         _selectedYearMonth.value = Pair(now.year, now.month)
         _selectedDate.value = now
     }
@@ -546,15 +590,11 @@ class TaskViewModel(
         }
     }
 
-    private var autoBackupFailureRetryCount = 0
-    private val maxAutoBackupRetries = 3
-
     fun triggerAutoBackup(debounceMs: Long = DEFAULT_AUTO_BACKUP_DEBOUNCE_MS) {
         if (!driveBackupManager.isAutoBackupEnabled()) return
         if (driveBackupManager.getSignedInAccount() == null) return
 
         isAutoBackupPending = true
-        driveBackupManager.setBackupPendingDurable(true)
         debounceJob?.cancel()
         debounceJob = viewModelScope.launch {
             if (debounceMs > 0) {
@@ -575,49 +615,24 @@ class TaskViewModel(
     private suspend fun executeAutoBackupLoop() {
         driveBackupMutex.withLock {
             while (isAutoBackupPending) {
+                isAutoBackupPending = false
                 if (!driveBackupManager.isAutoBackupEnabled() || driveBackupManager.getSignedInAccount() == null) {
-                    isAutoBackupPending = false
                     break
                 }
-
-                // Snap current snapshot of data
-                val tasks = repository.allTasks.first()
-                val completions = repository.allCompletions.first()
-                val categories = repository.allCategories.first()
-
-                // Mark that we are uploading this state
-                val uploaded = try {
+                try {
+                    val tasks = repository.allTasks.first()
+                    val completions = repository.allCompletions.first()
+                    val categories = repository.allCategories.first()
                     val result = driveBackupManager.backupToDrive(tasks, completions, categories)
                     if (result.isSuccess) {
-                        autoBackupFailureRetryCount = 0
-                        // Clear pending flag only on successful upload if no new edits arrived during upload
-                        driveBackupManager.setBackupPendingDurable(false)
-                        isAutoBackupPending = false
                         refreshDriveState()
-                        true
                     } else {
                         val err = result.exceptionOrNull()?.message ?: "Auto-backup failed"
                         refreshDriveState(message = "Auto-backup error: $err", isError = true)
-                        false
                     }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     refreshDriveState(message = "Auto-backup failed: ${e.message}", isError = true)
-                    false
-                }
-
-                if (!uploaded) {
-                    autoBackupFailureRetryCount++
-                    if (autoBackupFailureRetryCount <= maxAutoBackupRetries) {
-                        // Bounded exponential backoff: 2s, 4s, 8s
-                        val backoffMs = (1000L * (1 shl autoBackupFailureRetryCount)).coerceAtMost(10000L)
-                        delay(backoffMs)
-                        // Keep isAutoBackupPending = true to retry next iteration
-                    } else {
-                        // Exhausted retries for this attempt, retain durable pending flag so future edit or app launch retries
-                        isAutoBackupPending = false
-                        break
-                    }
                 }
             }
         }

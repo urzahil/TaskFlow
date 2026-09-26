@@ -16,6 +16,7 @@ data class DaySummaryUi(
     val taskColors: List<Long> = emptyList()
 ) {
     val hasTasks: Boolean get() = totalTasks > 0
+    val pendingTasks: Int get() = (totalTasks - completedTasks).coerceAtLeast(0)
     val allCompleted: Boolean get() = hasTasks && completedTasks == totalTasks
 }
 

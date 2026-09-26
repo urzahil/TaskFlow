@@ -78,10 +78,11 @@ fun MonthlyView(
     onDeleteTask: (TaskEntity) -> Unit,
     onSwitchToDailyView: () -> Unit,
     onAddTaskForDay: () -> Unit,
+    currentToday: AppDate = AppDate.today(),
     modifier: Modifier = Modifier
 ) {
     val (year, month) = yearMonth
-    val today = remember { AppDate.today() }
+    val today = currentToday
 
     // Calculate calendar grid days: starting from Monday before 1st of month
     val calendarDays = remember(year, month) {

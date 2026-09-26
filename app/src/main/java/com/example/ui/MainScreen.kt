@@ -93,6 +93,8 @@ fun MainScreen(
     val maintenanceMessage by viewModel.maintenanceMessage.collectAsStateWithLifecycle()
     val driveSyncState by viewModel.driveSyncState.collectAsStateWithLifecycle()
     val showDailyProgress by viewModel.showDailyProgress.collectAsStateWithLifecycle()
+    val currentToday by viewModel.currentToday.collectAsStateWithLifecycle()
+    val lastRolloverInfo by viewModel.lastRolloverInfo.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var isSearchActive by remember { mutableStateOf(false) }
@@ -223,7 +225,7 @@ fun MainScreen(
                         }
                     },
                     actions = {
-                        if (viewMode == ViewMode.DAILY && selectedDate != AppDate.today()) {
+                        if (viewMode == ViewMode.DAILY && selectedDate != currentToday) {
                             IconButton(
                                 onClick = { viewModel.jumpToToday() },
                                 modifier = Modifier.testTag("jump_today_top_button")
@@ -235,7 +237,7 @@ fun MainScreen(
                                 )
                             }
                         }
-                        if (viewMode == ViewMode.MONTHLY && (selectedYearMonth.first != AppDate.today().year || selectedYearMonth.second != AppDate.today().month)) {
+                        if (viewMode == ViewMode.MONTHLY && (selectedYearMonth.first != currentToday.year || selectedYearMonth.second != currentToday.month)) {
                             IconButton(
                                 onClick = { viewModel.jumpToCurrentMonth() },
                                 modifier = Modifier.testTag("jump_current_month_top_button")
@@ -381,7 +383,8 @@ fun MainScreen(
                         onEditTask = { viewModel.openEditTaskDialog(it) },
                         onDeleteTask = { viewModel.deleteTask(it) },
                         onAddTask = { viewModel.openAddTaskDialog() },
-                        showDailyProgress = showDailyProgress
+                        showDailyProgress = showDailyProgress,
+                        currentToday = currentToday
                     )
                 }
                 ViewMode.MONTHLY -> {
@@ -398,7 +401,8 @@ fun MainScreen(
                         onEditTask = { viewModel.openEditTaskDialog(it) },
                         onDeleteTask = { viewModel.deleteTask(it) },
                         onSwitchToDailyView = { viewModel.setViewMode(ViewMode.DAILY) },
-                        onAddTaskForDay = { viewModel.openAddTaskDialog() }
+                        onAddTaskForDay = { viewModel.openAddTaskDialog() },
+                        currentToday = currentToday
                     )
                 }
                 ViewMode.SETTINGS -> {
@@ -417,6 +421,7 @@ fun MainScreen(
                         onRunMaintenance = {
                             viewModel.runCleanupAndRollover()
                         },
+                        lastRolloverInfo = lastRolloverInfo,
                         driveSyncState = driveSyncState,
                         onConnectDrive = {
                             googleSignInLauncher.launch(

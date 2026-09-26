@@ -95,9 +95,10 @@ fun DailyView(
     onDeleteTask: (TaskEntity) -> Unit,
     onAddTask: () -> Unit,
     showDailyProgress: Boolean = true,
+    currentToday: AppDate = AppDate.today(),
     modifier: Modifier = Modifier
 ) {
-    val today = remember { AppDate.today() }
+    val today = currentToday
     val isToday = selectedDate == today
 
     LazyColumn(

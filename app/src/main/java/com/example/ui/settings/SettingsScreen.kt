@@ -107,6 +107,7 @@ fun SettingsScreen(
     onShareJsonBackup: () -> Unit = {},
     showDailyProgress: Boolean = true,
     onToggleDailyProgress: (Boolean) -> Unit = {},
+    lastRolloverInfo: Pair<String, String>? = null,
     modifier: Modifier = Modifier
 ) {
     BackHandler(onBack = onBack)
@@ -952,7 +953,7 @@ fun SettingsScreen(
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = "Runs automatically on app startup",
+                                        text = "Runs on startup & every time app is foregrounded",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -962,10 +963,35 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.height(10.dp))
 
                             Text(
-                                text = "• Automatically removes completed tasks from previous days.\n• Carries forward any uncompleted tasks to today so no to-do gets left behind.\n• Cleans old past occurrences of recurring tasks.",
+                                text = "• Automatically removes completed tasks from previous days.\n• Carries forward uncompleted tasks to today.\n• Cleans old occurrences of recurring tasks.\n• Checks every time the app is opened or brought to the foreground with 0% background battery impact.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+
+                            if (lastRolloverInfo != null && lastRolloverInfo.first.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Last verified rollover:",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = if (lastRolloverInfo.second.isNotBlank()) "${lastRolloverInfo.first} at ${lastRolloverInfo.second}" else lastRolloverInfo.first,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
 
                             Spacer(modifier = Modifier.height(14.dp))
 
