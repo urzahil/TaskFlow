@@ -287,14 +287,11 @@ fun MainScreen(
                                     isSearchActive = !isSearchActive
                                     if (!isSearchActive) viewModel.setSearchQuery("")
                                 },
-                                modifier = Modifier
-                                    .testTag("search_toggle_button")
-                                    .size(36.dp)
+                                modifier = Modifier.testTag("search_toggle_button")
                             ) {
                                 Icon(
                                     if (isSearchActive) Icons.Default.Clear else Icons.Default.Search,
-                                    contentDescription = "Search",
-                                    modifier = Modifier.size(20.dp)
+                                    contentDescription = "Search"
                                 )
                             }
                         }
@@ -304,15 +301,12 @@ fun MainScreen(
                                     if (viewMode == ViewMode.SETTINGS) ViewMode.DAILY else ViewMode.SETTINGS
                                 )
                             },
-                            modifier = Modifier
-                                .testTag("settings_top_button")
-                                .size(36.dp)
+                            modifier = Modifier.testTag("settings_top_button")
                         ) {
                             Icon(
                                 Icons.Default.Settings,
                                 contentDescription = "Settings",
-                                tint = if (viewMode == ViewMode.SETTINGS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
+                                tint = if (viewMode == ViewMode.SETTINGS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
