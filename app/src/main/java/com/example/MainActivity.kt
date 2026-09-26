@@ -81,6 +81,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        viewModel.onAppForegrounded()
+    }
+
     override fun onStop() {
         super.onStop()
         dateChangeReceiver?.let {

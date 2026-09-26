@@ -428,7 +428,7 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (isDarkMode) "Dark theme enabled (default)" else "Light theme enabled",
+                                    text = if (isDarkMode) "Dark theme enabled" else "Light theme enabled",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -482,7 +482,7 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (useDynamicColors) "Color highlights follow system theme (default)" else "Using custom app theme colors",
+                                    text = if (useDynamicColors) "System theme" else "App theme",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -590,7 +590,7 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "Hide the preview task list under the calendar in Monthly view (default is off)",
+                                    text = "Hide the preview task list under the calendar in Monthly view",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -1199,7 +1199,7 @@ fun SettingsScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "TaskFlow • Version 2.3.5",
+                    text = "TaskFlow • Version 2.4.7",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

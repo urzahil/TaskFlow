@@ -207,8 +207,10 @@ class TaskViewModel(
             }
             refreshDriveState()
 
-            // Run startup check to clean old completed tasks and roll forward tasks to today
-            onAppForegrounded()
+            // Run startup check unconditionally to clean old completed tasks and roll forward tasks to today
+            val today = AppDate.today()
+            _currentToday.value = today
+            runCleanupAndRollover(targetDate = today, isForegroundCheck = true)
         }
 
         // Lightweight watcher for midnight boundary transition when app is open
@@ -242,27 +244,21 @@ class TaskViewModel(
 
     /**
      * Called whenever the app is brought into foreground or when the system reports date change.
-     * Checks if it is a new day compared to the last recorded rollover.
-     * Uses 0 background battery since it executes only on foreground transition.
+     * Updates current today, auto-advances selected date if needed, and executes the cleanup and rollover job.
      */
     fun onAppForegrounded() {
         val now = AppDate.today()
         val previousToday = _currentToday.value
         _currentToday.value = now
 
-        val lastRolloverDateIso = userPrefs?.getString(KEY_LAST_ROLLOVER_DATE, null)
-        val todayIso = now.toIsoString()
-
-        val isNewDay = lastRolloverDateIso != todayIso || previousToday != now
-
-        if (isNewDay) {
-            // Auto-advance selected date if the user was on yesterday's 'today'
-            if (_selectedDate.value == previousToday) {
-                _selectedDate.value = now
-                _selectedYearMonth.value = Pair(now.year, now.month)
-            }
-            runCleanupAndRollover(targetDate = now, isForegroundCheck = true)
+        // Auto-advance selected date if the user was on yesterday's 'today'
+        if (_selectedDate.value == previousToday && previousToday != now) {
+            _selectedDate.value = now
+            _selectedYearMonth.value = Pair(now.year, now.month)
         }
+
+        // Always execute cleanup and rollover on foreground transition and date changes
+        runCleanupAndRollover(targetDate = now, isForegroundCheck = true)
     }
 
     fun onDateChanged() {
@@ -340,6 +336,38 @@ class TaskViewModel(
             TaskFilter.ALL -> queryFiltered
             TaskFilter.PENDING -> queryFiltered.filter { !it.isCompleted }
             TaskFilter.COMPLETED -> queryFiltered.filter { it.isCompleted }
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    /**
+     * In the selected day overview of the monthly view, always show all scheduled tasks
+     * for the selected date regardless of the completion filter (All, pending, done) on the daily page.
+     */
+    val monthlySelectedDayTasks: StateFlow<List<TaskItemUi>> = combine(
+        repository.allTasks,
+        repository.allCompletions,
+        _selectedDate
+    ) { tasks, completions, date ->
+        val dateIso = date.toIsoString()
+        val completedTaskIds = completions
+            .filter { it.date == dateIso }
+            .map { it.taskId }
+            .toSet()
+
+        val scheduledTasks = tasks.filter { task ->
+            repository.isTaskScheduledOnDate(task, date)
+        }
+
+        scheduledTasks.map { task ->
+            TaskItemUi(
+                task = task,
+                date = date,
+                isCompleted = completedTaskIds.contains(task.id)
+            )
         }
     }.stateIn(
         scope = viewModelScope,
@@ -437,6 +465,87 @@ class TaskViewModel(
             val date = AppDate(year, month, day)
             val dateIso = date.toIsoString()
 
+            val completedIds = completionsByDate[dateIso]?.map { it.taskId }?.toSet() ?: emptySet()
+
+            val scheduledTasks = parsedTasks.filter { task ->
+                if (!task.isRecurring) {
+                    task.startDate == date
+                } else {
+                    if (date < task.startDate) {
+                        false
+                    } else if (task.endDate != null && date > task.endDate) {
+                        false
+                    } else if (!task.recurrenceDaysOfWeek.isNullOrEmpty()) {
+                        task.recurrenceDaysOfWeek.contains(date.dayOfWeek())
+                    } else {
+                        date.daysBetween(task.startDate) % task.recurrenceDays == 0L
+                    }
+                }
+            }
+
+            if (scheduledTasks.isNotEmpty()) {
+                val completedCount = scheduledTasks.count { completedIds.contains(it.id) }
+                val colors = scheduledTasks.take(3).map { it.colorHex }
+
+                summaryMap[dateIso] = DaySummaryUi(
+                    date = date,
+                    totalTasks = scheduledTasks.size,
+                    completedTasks = completedCount,
+                    taskColors = colors
+                )
+            }
+        }
+
+        summaryMap
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = emptyMap()
+    )
+
+    /**
+     * Map of Date ISO string to DaySummaryUi for the 7 days visible in the Daily view's week list strip.
+     * Shows number of tasks for each day, similar to the monthly view.
+     */
+    val weekDaysSummary: StateFlow<Map<String, DaySummaryUi>> = combine(
+        repository.allTasks,
+        repository.allCompletions,
+        _selectedDate
+    ) { tasks, completions, selectedDate ->
+        val stripDays = (-3..3).map { offset -> selectedDate.plusDays(offset.toLong()) }
+        val summaryMap = mutableMapOf<String, DaySummaryUi>()
+
+        val parsedTasks = tasks.mapNotNull { task ->
+            val start = try {
+                AppDate.parseIso(task.startDate)
+            } catch (_: Exception) {
+                null
+            } ?: return@mapNotNull null
+
+            val end = if (!task.endDate.isNullOrBlank()) {
+                try { AppDate.parseIso(task.endDate) } catch (_: Exception) { null }
+            } else null
+
+            val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
+            val daysOfWeekSet = if (!task.recurrenceDaysOfWeek.isNullOrBlank()) {
+                task.recurrenceDaysOfWeek.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+            } else null
+
+            ParsedTaskSchedule(
+                id = task.id,
+                colorHex = task.colorHex,
+                isRecurring = task.isRecurring,
+                recurrenceDays = interval,
+                recurrenceDaysOfWeek = daysOfWeekSet,
+                startDate = start,
+                endDate = end
+            )
+        }
+
+        val completionsByDate = completions.groupBy { it.date }
+
+        for (date in stripDays) {
+            val dateIso = date.toIsoString()
             val completedIds = completionsByDate[dateIso]?.map { it.taskId }?.toSet() ?: emptySet()
 
             val scheduledTasks = parsedTasks.filter { task ->

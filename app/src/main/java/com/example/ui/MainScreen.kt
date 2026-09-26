@@ -82,9 +82,11 @@ fun MainScreen(
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     val selectedYearMonth by viewModel.selectedYearMonth.collectAsStateWithLifecycle()
     val dailyTasks by viewModel.dailyTasks.collectAsStateWithLifecycle()
+    val monthlySelectedDayTasks by viewModel.monthlySelectedDayTasks.collectAsStateWithLifecycle()
     val dailyStats by viewModel.dailyStats.collectAsStateWithLifecycle()
     val taskFilter by viewModel.taskFilter.collectAsStateWithLifecycle()
     val monthSummaries by viewModel.monthDaysSummary.collectAsStateWithLifecycle()
+    val weekDaysSummary by viewModel.weekDaysSummary.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
 
@@ -387,7 +389,8 @@ fun MainScreen(
                         onDeleteTask = { viewModel.deleteTask(it) },
                         onAddTask = { viewModel.openAddTaskDialog() },
                         showDailyProgress = showDailyProgress,
-                        currentToday = currentToday
+                        currentToday = currentToday,
+                        weekSummaries = weekDaysSummary
                     )
                 }
                 ViewMode.MONTHLY -> {
@@ -395,7 +398,7 @@ fun MainScreen(
                         yearMonth = selectedYearMonth,
                         selectedDate = selectedDate,
                         monthSummaries = monthSummaries,
-                        selectedDayTasks = dailyTasks,
+                        selectedDayTasks = monthlySelectedDayTasks,
                         onSelectDate = { viewModel.selectDate(it) },
                         onPrevMonth = { viewModel.prevMonth() },
                         onNextMonth = { viewModel.nextMonth() },

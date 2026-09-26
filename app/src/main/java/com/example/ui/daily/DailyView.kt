@@ -73,8 +73,10 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.AppDate
 import com.example.data.model.TaskEntity
 import com.example.ui.DailyStats
+import com.example.ui.model.DaySummaryUi
 import com.example.ui.model.TaskFilter
 import com.example.ui.model.TaskItemUi
+import com.example.ui.theme.CompletedGreen
 import com.example.ui.theme.PriorityHigh
 import com.example.ui.theme.PriorityLow
 import com.example.ui.theme.PriorityMedium
@@ -96,6 +98,7 @@ fun DailyView(
     onAddTask: () -> Unit,
     showDailyProgress: Boolean = true,
     currentToday: AppDate = AppDate.today(),
+    weekSummaries: Map<String, DaySummaryUi> = emptyMap(),
     modifier: Modifier = Modifier
 ) {
     val today = currentToday
@@ -200,6 +203,10 @@ fun DailyView(
                         daysStrip.forEach { stripDate ->
                             val isSelected = stripDate == selectedDate
                             val isStripToday = stripDate == today
+                            val summary = weekSummaries[stripDate.toIsoString()]
+                            val hasTasks = summary?.hasTasks == true
+                            val allCompleted = summary?.allCompleted == true
+                            val pendingCount = summary?.pendingTasks ?: 0
 
                             val containerColor by animateColorAsState(
                                 targetValue = if (isSelected) {
@@ -229,7 +236,7 @@ fun DailyView(
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(containerColor)
                                     .clickable { onDateSelect(stripDate) }
-                                    .padding(vertical = 8.dp, horizontal = 10.dp)
+                                    .padding(vertical = 8.dp, horizontal = 7.dp)
                             ) {
                                 Text(
                                     text = AppDate.dayOfWeekShort(stripDate.dayOfWeek()).take(2),
@@ -244,6 +251,42 @@ fun DailyView(
                                     fontWeight = if (isSelected || isStripToday) FontWeight.Bold else FontWeight.Medium,
                                     color = contentColor
                                 )
+                                Spacer(modifier = Modifier.height(3.dp))
+                                if (hasTasks) {
+                                    if (allCompleted) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(12.dp)
+                                                .clip(CircleShape)
+                                                .background(if (isSelected) MaterialTheme.colorScheme.onPrimary else CompletedGreen),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.White,
+                                                modifier = Modifier.size(9.dp)
+                                            )
+                                        }
+                                    } else if (pendingCount > 0) {
+                                        Surface(
+                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(
+                                                text = pendingCount.toString(),
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.5.dp),
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onPrimary
+                                            )
+                                        }
+                                    } else {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                    }
+                                } else {
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                }
                             }
                         }
                     }
