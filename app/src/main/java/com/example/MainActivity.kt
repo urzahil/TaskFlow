@@ -40,7 +40,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val isDarkMode by viewModel.isDarkMode.collectAsStateWithLifecycle()
-            MyApplicationTheme(darkTheme = isDarkMode) {
+            val useDynamicColors by viewModel.useDynamicColors.collectAsStateWithLifecycle()
+            MyApplicationTheme(darkTheme = isDarkMode, dynamicColor = useDynamicColors) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     MainScreen(viewModel = viewModel)
                 }

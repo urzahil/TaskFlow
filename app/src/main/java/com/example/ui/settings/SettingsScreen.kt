@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tune
@@ -112,6 +113,8 @@ fun SettingsScreen(
     onToggleDailyProgress: (Boolean) -> Unit = {},
     isDarkMode: Boolean = true,
     onToggleDarkMode: (Boolean) -> Unit = {},
+    useDynamicColors: Boolean = true,
+    onToggleDynamicColors: (Boolean) -> Unit = {},
     hideMonthlyTaskList: Boolean = false,
     onToggleHideMonthlyTaskList: (Boolean) -> Unit = {},
     lastRolloverInfo: Pair<String, String>? = null,
@@ -435,6 +438,60 @@ fun SettingsScreen(
                             checked = isDarkMode,
                             onCheckedChange = onToggleDarkMode,
                             modifier = Modifier.testTag("toggle_dark_mode_switch")
+                        )
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+
+                    // System Color Highlights (Dynamic Colors)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggleDynamicColors(!useDynamicColors) }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Palette,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column {
+                                Text(
+                                    text = "System Color Highlights",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (useDynamicColors) "Color highlights follow system theme (default)" else "Using custom app theme colors",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = useDynamicColors,
+                            onCheckedChange = onToggleDynamicColors,
+                            modifier = Modifier.testTag("toggle_dynamic_colors_switch")
                         )
                     }
 

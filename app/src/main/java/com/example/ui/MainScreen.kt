@@ -94,6 +94,7 @@ fun MainScreen(
     val driveSyncState by viewModel.driveSyncState.collectAsStateWithLifecycle()
     val showDailyProgress by viewModel.showDailyProgress.collectAsStateWithLifecycle()
     val isDarkMode by viewModel.isDarkMode.collectAsStateWithLifecycle()
+    val useDynamicColors by viewModel.useDynamicColors.collectAsStateWithLifecycle()
     val hideMonthlyTaskList by viewModel.hideMonthlyTaskList.collectAsStateWithLifecycle()
     val currentToday by viewModel.currentToday.collectAsStateWithLifecycle()
     val lastRolloverInfo by viewModel.lastRolloverInfo.collectAsStateWithLifecycle()
@@ -467,6 +468,8 @@ fun MainScreen(
                         onToggleDailyProgress = { viewModel.setShowDailyProgress(it) },
                         isDarkMode = isDarkMode,
                         onToggleDarkMode = { viewModel.setDarkMode(it) },
+                        useDynamicColors = useDynamicColors,
+                        onToggleDynamicColors = { viewModel.setUseDynamicColors(it) },
                         hideMonthlyTaskList = hideMonthlyTaskList,
                         onToggleHideMonthlyTaskList = { viewModel.setHideMonthlyTaskList(it) }
                     )

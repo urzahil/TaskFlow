@@ -64,6 +64,7 @@ class TaskViewModel(
         private const val PREFS_NAME = "taskflow_user_prefs"
         private const val KEY_SHOW_DAILY_PROGRESS = "show_daily_progress"
         private const val KEY_IS_DARK_MODE = "is_dark_mode"
+        private const val KEY_USE_DYNAMIC_COLORS = "use_dynamic_colors"
         private const val KEY_HIDE_MONTHLY_TASK_LIST = "hide_monthly_task_list"
         private const val KEY_LAST_ROLLOVER_DATE = "last_rollover_date"
         private const val KEY_LAST_ROLLOVER_TIMESTAMP = "last_rollover_timestamp"
@@ -79,6 +80,16 @@ class TaskViewModel(
     fun setDarkMode(enabled: Boolean) {
         _isDarkMode.value = enabled
         userPrefs?.edit()?.putBoolean(KEY_IS_DARK_MODE, enabled)?.apply()
+    }
+
+    private val _useDynamicColors = MutableStateFlow(
+        userPrefs?.getBoolean(KEY_USE_DYNAMIC_COLORS, true) ?: true
+    )
+    val useDynamicColors: StateFlow<Boolean> = _useDynamicColors.asStateFlow()
+
+    fun setUseDynamicColors(enabled: Boolean) {
+        _useDynamicColors.value = enabled
+        userPrefs?.edit()?.putBoolean(KEY_USE_DYNAMIC_COLORS, enabled)?.apply()
     }
 
     private val _hideMonthlyTaskList = MutableStateFlow(
