@@ -243,7 +243,7 @@ fun DailyView(
                             ) {
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.padding(vertical = 7.dp, horizontal = 2.dp)
+                                    modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp)
                                 ) {
                                     Text(
                                         text = AppDate.dayOfWeekShort(stripDate.dayOfWeek()),
@@ -252,19 +252,19 @@ fun DailyView(
                                         color = contentColor,
                                         maxLines = 1
                                     )
-                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Spacer(modifier = Modifier.height(1.5.dp))
                                     Text(
                                         text = stripDate.day.toString(),
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.5.sp),
                                         fontWeight = if (isSelected || isStripToday) FontWeight.Bold else FontWeight.SemiBold,
                                         color = contentColor
                                     )
-                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Spacer(modifier = Modifier.height(1.5.dp))
                                     if (hasTasks) {
                                         if (allCompleted) {
                                             Box(
                                                 modifier = Modifier
-                                                    .size(13.dp)
+                                                    .size(12.dp)
                                                     .clip(CircleShape)
                                                     .background(if (isSelected) MaterialTheme.colorScheme.onPrimary else CompletedGreen),
                                                 contentAlignment = Alignment.Center
@@ -273,27 +273,27 @@ fun DailyView(
                                                     Icons.Default.Check,
                                                     contentDescription = null,
                                                     tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.White,
-                                                    modifier = Modifier.size(9.dp)
+                                                    modifier = Modifier.size(8.5.dp)
                                                 )
                                             }
                                         } else if (pendingCount > 0) {
                                             Surface(
                                                 color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
-                                                shape = RoundedCornerShape(5.dp)
+                                                shape = RoundedCornerShape(4.dp)
                                             ) {
                                                 Text(
                                                     text = pendingCount.toString(),
-                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.5.dp),
-                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
+                                                    modifier = Modifier.padding(horizontal = 3.5.dp, vertical = 0.dp),
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                                     fontWeight = FontWeight.Bold,
                                                     color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onPrimary
                                                 )
                                             }
                                         } else {
-                                            Spacer(modifier = Modifier.height(13.dp))
+                                            Spacer(modifier = Modifier.height(12.dp))
                                         }
                                     } else {
-                                        Spacer(modifier = Modifier.height(13.dp))
+                                        Spacer(modifier = Modifier.height(12.dp))
                                     }
                                 }
                             }

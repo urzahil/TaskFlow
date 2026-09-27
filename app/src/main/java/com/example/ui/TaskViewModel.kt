@@ -66,6 +66,7 @@ class TaskViewModel(
         private const val KEY_IS_DARK_MODE = "is_dark_mode"
         private const val KEY_USE_DYNAMIC_COLORS = "use_dynamic_colors"
         private const val KEY_HIDE_MONTHLY_TASK_LIST = "hide_monthly_task_list"
+        private const val KEY_ROLLOVER_CLEANUP_ENABLED = "rollover_cleanup_enabled"
         private const val KEY_LAST_ROLLOVER_DATE = "last_rollover_date"
         private const val KEY_LAST_ROLLOVER_TIMESTAMP = "last_rollover_timestamp"
     }
@@ -100,6 +101,16 @@ class TaskViewModel(
     fun setHideMonthlyTaskList(hide: Boolean) {
         _hideMonthlyTaskList.value = hide
         userPrefs?.edit()?.putBoolean(KEY_HIDE_MONTHLY_TASK_LIST, hide)?.apply()
+    }
+
+    private val _rolloverCleanupEnabled = MutableStateFlow(
+        userPrefs?.getBoolean(KEY_ROLLOVER_CLEANUP_ENABLED, true) ?: true
+    )
+    val rolloverCleanupEnabled: StateFlow<Boolean> = _rolloverCleanupEnabled.asStateFlow()
+
+    fun setRolloverCleanupEnabled(enabled: Boolean) {
+        _rolloverCleanupEnabled.value = enabled
+        userPrefs?.edit()?.putBoolean(KEY_ROLLOVER_CLEANUP_ENABLED, enabled)?.apply()
     }
 
     private val _showDailyProgress = MutableStateFlow(
@@ -270,6 +281,9 @@ class TaskViewModel(
         isForegroundCheck: Boolean = false,
         onComplete: ((Int, Int, Int) -> Unit)? = null
     ) {
+        if (isForegroundCheck && !_rolloverCleanupEnabled.value) {
+            return
+        }
         viewModelScope.launch {
             val result = repository.cleanupAndRolloverTasks(targetDate)
             val nowTimeFormatted = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())

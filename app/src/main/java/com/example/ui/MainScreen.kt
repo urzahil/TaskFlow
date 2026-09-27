@@ -104,6 +104,7 @@ fun MainScreen(
     val hideMonthlyTaskList by viewModel.hideMonthlyTaskList.collectAsStateWithLifecycle()
     val currentToday by viewModel.currentToday.collectAsStateWithLifecycle()
     val lastRolloverInfo by viewModel.lastRolloverInfo.collectAsStateWithLifecycle()
+    val rolloverCleanupEnabled by viewModel.rolloverCleanupEnabled.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var isSearchActive by remember { mutableStateOf(false) }
@@ -254,30 +255,24 @@ fun MainScreen(
                         if (viewMode == ViewMode.DAILY && selectedDate != currentToday) {
                             IconButton(
                                 onClick = { viewModel.jumpToToday() },
-                                modifier = Modifier
-                                    .testTag("jump_today_top_button")
-                                    .size(36.dp)
+                                modifier = Modifier.testTag("jump_today_top_button")
                             ) {
                                 Icon(
                                     Icons.Default.Today,
                                     contentDescription = "Jump to Today",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
                         if (viewMode == ViewMode.MONTHLY && (selectedYearMonth.first != currentToday.year || selectedYearMonth.second != currentToday.month)) {
                             IconButton(
                                 onClick = { viewModel.jumpToCurrentMonth() },
-                                modifier = Modifier
-                                    .testTag("jump_current_month_top_button")
-                                    .size(36.dp)
+                                modifier = Modifier.testTag("jump_current_month_top_button")
                             ) {
                                 Icon(
                                     Icons.Default.Today,
                                     contentDescription = "Jump to Current Month",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
@@ -456,6 +451,8 @@ fun MainScreen(
                         onRunMaintenance = {
                             viewModel.runCleanupAndRollover()
                         },
+                        rolloverCleanupEnabled = rolloverCleanupEnabled,
+                        onToggleRolloverCleanupEnabled = { viewModel.setRolloverCleanupEnabled(it) },
                         lastRolloverInfo = lastRolloverInfo,
                         driveSyncState = driveSyncState,
                         onConnectDrive = {

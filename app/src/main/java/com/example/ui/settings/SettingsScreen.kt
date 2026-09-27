@@ -117,6 +117,8 @@ fun SettingsScreen(
     onToggleDynamicColors: (Boolean) -> Unit = {},
     hideMonthlyTaskList: Boolean = false,
     onToggleHideMonthlyTaskList: (Boolean) -> Unit = {},
+    rolloverCleanupEnabled: Boolean = true,
+    onToggleRolloverCleanupEnabled: (Boolean) -> Unit = {},
     lastRolloverInfo: Pair<String, String>? = null,
     modifier: Modifier = Modifier
 ) {
@@ -650,7 +652,11 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (driveSyncState.isSignedIn) "Connected & sync enabled" else "Not connected",
+                                    text = if (driveSyncState.isSignedIn) {
+                                        if (driveSyncState.autoBackupEnabled) "Connected & sync enabled" else "Connected"
+                                    } else {
+                                        "Not connected"
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (driveSyncState.isSignedIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -841,7 +847,7 @@ fun SettingsScreen(
                                     fontWeight = FontWeight.Medium
                                 )
                                 Text(
-                                    text = "Automatically save to Google Drive on every task change",
+                                    text = "Save to Google Drive on every change",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -1129,17 +1135,48 @@ fun SettingsScreen(
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = "Runs on startup & every time app is foregrounded",
+                                        text = if (rolloverCleanupEnabled) "Runs on startup & every time app is foregrounded" else "Automatic background job is disabled",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
 
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Rollover & cleanup toggle switch
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onToggleRolloverCleanupEnabled(!rolloverCleanupEnabled) }
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Automatic Rollover & Cleanup",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = if (rolloverCleanupEnabled) "Carries forward tasks and cleans old items automatically" else "Disabled — tasks won't roll over automatically",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (rolloverCleanupEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = rolloverCleanupEnabled,
+                                    onCheckedChange = onToggleRolloverCleanupEnabled,
+                                    modifier = Modifier.testTag("rollover_cleanup_switch")
+                                )
+                            }
+
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = "• Automatically removes completed tasks from previous days.\n• Carries forward uncompleted tasks to today.\n• Cleans old occurrences of recurring tasks.\n• Checks every time the app is opened or brought to the foreground with 0% background battery impact.",
+                                text = "• Removes completed tasks from previous days.\n• Carries forward uncompleted tasks to today.\n• Cleans old occurrences of recurring tasks.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1201,7 +1238,7 @@ fun SettingsScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "TaskFlow • Version 2.5.7",
+                    text = "TaskFlow • Version 2.5.8",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
