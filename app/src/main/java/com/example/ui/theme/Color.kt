@@ -2,6 +2,17 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
+// Light Scheme Colors - Green Theme (Default)
+val PrimaryGreen = Color(0xFF16A34A)
+val PrimaryGreenVariant = Color(0xFF15803D)
+val SecondaryEmerald = Color(0xFF0D9488)
+val TertiaryMint = Color(0xFF059669)
+
+// Dark Scheme Colors - Green Theme (Default)
+val PrimaryGreenDark = Color(0xFF4ADE80)
+val SecondaryEmeraldDark = Color(0xFF34D399)
+val TertiaryMintDark = Color(0xFF2DD4BF)
+
 // Light Scheme Colors
 val PrimaryBlue = Color(0xFF2563EB)
 val PrimaryBlueVariant = Color(0xFF1D4ED8)

@@ -106,6 +106,7 @@ fun MainScreen(
     val showMonthlyTaskList by viewModel.showMonthlyTaskList.collectAsStateWithLifecycle()
     val showMonthlyView by viewModel.showMonthlyView.collectAsStateWithLifecycle()
     val showListView by viewModel.showListView.collectAsStateWithLifecycle()
+    val startViewMode by viewModel.startViewMode.collectAsStateWithLifecycle()
     val next7DaysTasks by viewModel.next7DaysTasks.collectAsStateWithLifecycle()
     val currentToday by viewModel.currentToday.collectAsStateWithLifecycle()
     val lastRolloverInfo by viewModel.lastRolloverInfo.collectAsStateWithLifecycle()
@@ -518,7 +519,9 @@ fun MainScreen(
                         showMonthlyView = showMonthlyView,
                         onToggleShowMonthlyView = { viewModel.setShowMonthlyView(it) },
                         showListView = showListView,
-                        onToggleShowListView = { viewModel.setShowListView(it) }
+                        onToggleShowListView = { viewModel.setShowListView(it) },
+                        startViewMode = startViewMode,
+                        onSelectStartViewMode = { viewModel.setStartViewMode(it) }
                     )
                 }
             }

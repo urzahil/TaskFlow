@@ -75,6 +75,7 @@ class TaskViewModel(
         private const val KEY_ROLLOVER_CLEANUP_ENABLED = "rollover_cleanup_enabled"
         private const val KEY_LAST_ROLLOVER_DATE = "last_rollover_date"
         private const val KEY_LAST_ROLLOVER_TIMESTAMP = "last_rollover_timestamp"
+        private const val KEY_START_VIEW = "start_view_mode"
     }
 
     private val userPrefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -90,7 +91,7 @@ class TaskViewModel(
     }
 
     private val _useDynamicColors = MutableStateFlow(
-        userPrefs?.getBoolean(KEY_USE_DYNAMIC_COLORS, true) ?: true
+        userPrefs?.getBoolean(KEY_USE_DYNAMIC_COLORS, false) ?: false
     )
     val useDynamicColors: StateFlow<Boolean> = _useDynamicColors.asStateFlow()
 
@@ -178,6 +179,33 @@ class TaskViewModel(
         userPrefs?.edit()?.putBoolean(KEY_ROLLOVER_CLEANUP_ENABLED, enabled)?.apply()
     }
 
+    private val _startViewMode = MutableStateFlow(
+        userPrefs?.getString(KEY_START_VIEW, ViewMode.DAILY.name)?.let { name ->
+            try {
+                val mode = ViewMode.valueOf(name)
+                if (mode == ViewMode.SETTINGS) ViewMode.DAILY else mode
+            } catch (_: Exception) {
+                ViewMode.DAILY
+            }
+        } ?: ViewMode.DAILY
+    )
+    val startViewMode: StateFlow<ViewMode> = _startViewMode.asStateFlow()
+
+    fun setStartViewMode(mode: ViewMode) {
+        val validMode = if (mode == ViewMode.SETTINGS) ViewMode.DAILY else mode
+        _startViewMode.value = validMode
+        userPrefs?.edit()?.putString(KEY_START_VIEW, validMode.name)?.apply()
+    }
+
+    private fun getInitialViewMode(): ViewMode {
+        val preferred = _startViewMode.value
+        return when (preferred) {
+            ViewMode.MONTHLY -> if (_showMonthlyView.value) ViewMode.MONTHLY else ViewMode.DAILY
+            ViewMode.LIST -> if (_showListView.value) ViewMode.LIST else ViewMode.DAILY
+            else -> ViewMode.DAILY
+        }
+    }
+
     private val _showDailyProgress = MutableStateFlow(
         userPrefs?.getBoolean(KEY_SHOW_DAILY_PROGRESS, true) ?: true
     )
@@ -210,7 +238,7 @@ class TaskViewModel(
     private val _selectedYearMonth = MutableStateFlow(Pair(_currentToday.value.year, _currentToday.value.month))
     val selectedYearMonth: StateFlow<Pair<Int, Int>> = _selectedYearMonth.asStateFlow()
 
-    private val _viewMode = MutableStateFlow(ViewMode.DAILY)
+    private val _viewMode = MutableStateFlow(getInitialViewMode())
     val viewMode: StateFlow<ViewMode> = _viewMode.asStateFlow()
 
     private val _taskFilter = MutableStateFlow(TaskFilter.ALL)
