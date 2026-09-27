@@ -103,9 +103,9 @@ fun MainScreen(
     val showDailyProgress by viewModel.showDailyProgress.collectAsStateWithLifecycle()
     val isDarkMode by viewModel.isDarkMode.collectAsStateWithLifecycle()
     val useDynamicColors by viewModel.useDynamicColors.collectAsStateWithLifecycle()
-    val hideMonthlyTaskList by viewModel.hideMonthlyTaskList.collectAsStateWithLifecycle()
-    val hideMonthlyView by viewModel.hideMonthlyView.collectAsStateWithLifecycle()
-    val hideListView by viewModel.hideListView.collectAsStateWithLifecycle()
+    val showMonthlyTaskList by viewModel.showMonthlyTaskList.collectAsStateWithLifecycle()
+    val showMonthlyView by viewModel.showMonthlyView.collectAsStateWithLifecycle()
+    val showListView by viewModel.showListView.collectAsStateWithLifecycle()
     val next7DaysTasks by viewModel.next7DaysTasks.collectAsStateWithLifecycle()
     val currentToday by viewModel.currentToday.collectAsStateWithLifecycle()
     val lastRolloverInfo by viewModel.lastRolloverInfo.collectAsStateWithLifecycle()
@@ -340,13 +340,13 @@ fun MainScreen(
                         }
 
                         // View Mode Tabs: Daily, Monthly, and List views with visibility controlled by user settings
-                        val availableTabs = remember(hideMonthlyView, hideListView) {
+                        val availableTabs = remember(showMonthlyView, showListView) {
                             buildList {
                                 add(Triple(ViewMode.DAILY, "Daily", Icons.AutoMirrored.Filled.FormatListBulleted to "tab_daily_view"))
-                                if (!hideMonthlyView) {
+                                if (showMonthlyView) {
                                     add(Triple(ViewMode.MONTHLY, "Monthly", Icons.Default.CalendarMonth to "tab_monthly_view"))
                                 }
-                                if (!hideListView) {
+                                if (showListView) {
                                     add(Triple(ViewMode.LIST, "List", Icons.Default.ViewAgenda to "tab_list_view"))
                                 }
                             }
@@ -441,7 +441,7 @@ fun MainScreen(
                         onSwitchToDailyView = { viewModel.setViewMode(ViewMode.DAILY) },
                         onAddTaskForDay = { viewModel.openAddTaskDialog() },
                         currentToday = currentToday,
-                        hideMonthlyTaskList = hideMonthlyTaskList
+                        showMonthlyTaskList = showMonthlyTaskList
                     )
                 }
                 ViewMode.LIST -> {
@@ -513,12 +513,12 @@ fun MainScreen(
                         onToggleDarkMode = { viewModel.setDarkMode(it) },
                         useDynamicColors = useDynamicColors,
                         onToggleDynamicColors = { viewModel.setUseDynamicColors(it) },
-                        hideMonthlyTaskList = hideMonthlyTaskList,
-                        onToggleHideMonthlyTaskList = { viewModel.setHideMonthlyTaskList(it) },
-                        hideMonthlyView = hideMonthlyView,
-                        onToggleHideMonthlyView = { viewModel.setHideMonthlyView(it) },
-                        hideListView = hideListView,
-                        onToggleHideListView = { viewModel.setHideListView(it) }
+                        showMonthlyTaskList = showMonthlyTaskList,
+                        onToggleShowMonthlyTaskList = { viewModel.setShowMonthlyTaskList(it) },
+                        showMonthlyView = showMonthlyView,
+                        onToggleShowMonthlyView = { viewModel.setShowMonthlyView(it) },
+                        showListView = showListView,
+                        onToggleShowListView = { viewModel.setShowListView(it) }
                     )
                 }
             }

@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudDone
@@ -80,6 +81,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -116,12 +118,12 @@ fun SettingsScreen(
     onToggleDarkMode: (Boolean) -> Unit = {},
     useDynamicColors: Boolean = true,
     onToggleDynamicColors: (Boolean) -> Unit = {},
-    hideMonthlyTaskList: Boolean = false,
-    onToggleHideMonthlyTaskList: (Boolean) -> Unit = {},
-    hideMonthlyView: Boolean = false,
-    onToggleHideMonthlyView: (Boolean) -> Unit = {},
-    hideListView: Boolean = false,
-    onToggleHideListView: (Boolean) -> Unit = {},
+    showMonthlyTaskList: Boolean = true,
+    onToggleShowMonthlyTaskList: (Boolean) -> Unit = {},
+    showMonthlyView: Boolean = true,
+    onToggleShowMonthlyView: (Boolean) -> Unit = {},
+    showListView: Boolean = true,
+    onToggleShowListView: (Boolean) -> Unit = {},
     rolloverCleanupEnabled: Boolean = true,
     onToggleRolloverCleanupEnabled: (Boolean) -> Unit = {},
     lastRolloverInfo: Pair<String, String>? = null,
@@ -133,7 +135,6 @@ fun SettingsScreen(
     var categoryToEdit by remember { mutableStateOf<CategoryEntity?>(null) }
     var categoryToDelete by remember { mutableStateOf<CategoryEntity?>(null) }
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
-    var isAdvancedExpanded by remember { mutableStateOf(false) }
 
     val density = LocalDensity.current
     val edgeThresholdPx = with(density) { 60.dp.toPx() }
@@ -181,26 +182,56 @@ fun SettingsScreen(
             contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+        // Section: Task Categories (Moved to top of Settings)
+        item {
+            SettingsSectionHeader(
+                title = "TASK CATEGORIES",
+                icon = Icons.Default.Category
+            )
+        }
+
         // Section: Category Management Header
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                 shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("categories_management_card")
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = "Task Categories",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "Create, edit colors and icons, or manage task categories.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Task Categories",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Create, edit colors and icons, or manage task categories.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = "${categories.size} TOTAL",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
@@ -390,7 +421,14 @@ fun SettingsScreen(
             }
         }
 
-        // Section: Display Preferences
+        // Section: Appaerance
+        item {
+            SettingsSectionHeader(
+                title = "APPAERANCE",
+                icon = Icons.Default.Palette
+            )
+        }
+
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -431,13 +469,13 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = "Dark Theme",
+                                    text = "Theme",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (isDarkMode) "Dark theme enabled" else "Light theme enabled",
+                                    text = if (isDarkMode) "Dark theme" else "Light theme",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -455,7 +493,7 @@ fun SettingsScreen(
                         modifier = Modifier.padding(horizontal = 12.dp)
                     )
 
-                    // System Color Highlights (Dynamic Colors)
+                    // Color Theme (Dynamic Colors)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -485,7 +523,7 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = "System Color Highlights",
+                                    text = "Colors",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -501,6 +539,130 @@ fun SettingsScreen(
                             checked = useDynamicColors,
                             onCheckedChange = onToggleDynamicColors,
                             modifier = Modifier.testTag("toggle_dynamic_colors_switch")
+                        )
+                    }
+                }
+            }
+        }
+
+        // Section: Views & Navigation
+        item {
+            SettingsSectionHeader(
+                title = "VIEWS & NAVIGATION",
+                icon = Icons.Default.ViewAgenda
+            )
+        }
+
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("views_preferences_card")
+            ) {
+                Column {
+                    // Monthly View
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggleShowMonthlyView(!showMonthlyView) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CalendarMonth,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Monthly view",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Show the Monthly calendar tab in navigation",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = showMonthlyView,
+                            onCheckedChange = onToggleShowMonthlyView,
+                            modifier = Modifier.testTag("toggle_monthly_view_switch")
+                        )
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // List View
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggleShowListView(!showListView) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ViewAgenda,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "List view",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Show the 7-day List tab in navigation",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = showListView,
+                            onCheckedChange = onToggleShowListView,
+                            modifier = Modifier.testTag("toggle_list_view_switch")
                         )
                     }
 
@@ -539,7 +701,7 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = "Daily Progress Bar",
+                                    text = "Daily progress bar",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -563,11 +725,11 @@ fun SettingsScreen(
                         modifier = Modifier.padding(horizontal = 12.dp)
                     )
 
-                    // Hide Monthly View
+                    // Monthly Task List
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onToggleHideMonthlyView(!hideMonthlyView) }
+                            .clickable { onToggleShowMonthlyTaskList(!showMonthlyTaskList) }
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -593,134 +755,34 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = "Hide Monthly View",
+                                    text = "Monthly task list",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "Hide the Monthly tab and calendar from navigation",
+                                    text = "Show the task list under the calendar in Monthly view",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                         Switch(
-                            checked = hideMonthlyView,
-                            onCheckedChange = onToggleHideMonthlyView,
-                            modifier = Modifier.testTag("toggle_hide_monthly_view_switch")
-                        )
-                    }
-
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-
-                    // Hide List View
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onToggleHideListView(!hideListView) }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.ViewAgenda,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "Hide List View",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Hide the 7-day List tab from navigation",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        Switch(
-                            checked = hideListView,
-                            onCheckedChange = onToggleHideListView,
-                            modifier = Modifier.testTag("toggle_hide_list_view_switch")
-                        )
-                    }
-
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-
-                    // Hide Monthly Task List
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onToggleHideMonthlyTaskList(!hideMonthlyTaskList) }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.CalendarMonth,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "Hide Monthly Task List",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Hide the preview task list under the calendar in Monthly view",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        Switch(
-                            checked = hideMonthlyTaskList,
-                            onCheckedChange = onToggleHideMonthlyTaskList,
-                            modifier = Modifier.testTag("toggle_hide_monthly_tasks_switch")
+                            checked = showMonthlyTaskList,
+                            onCheckedChange = onToggleShowMonthlyTaskList,
+                            modifier = Modifier.testTag("toggle_monthly_tasks_switch")
                         )
                     }
                 }
             }
+        }
+
+        // Section: Backup
+        item {
+            SettingsSectionHeader(
+                title = "BACKUP",
+                icon = Icons.Default.Cloud
+            )
         }
 
         // Section: Google Drive Cloud Backup & Restore
@@ -1150,7 +1212,15 @@ fun SettingsScreen(
             }
         }
 
-        // Advanced Settings Popdown (Closed by default)
+        // Section: Automation & Maintenance
+        item {
+            SettingsSectionHeader(
+                title = "AUTOMATION & MAINTENANCE",
+                icon = Icons.Default.AutoMode
+            )
+        }
+
+        // Daily Rollover & Cleanup (Directly accessible, no dropdown)
         item {
             Card(
                 colors = CardDefaults.cardColors(
@@ -1160,202 +1230,188 @@ fun SettingsScreen(
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("advanced_settings_card")
+                    .testTag("maintenance_card")
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { isAdvancedExpanded = !isAdvancedExpanded },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.secondaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.Tune,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
+                            Icon(
+                                Icons.Default.AutoMode,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
                             Text(
-                                text = "Advanced",
+                                text = "Daily Rollover & Cleanup",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                        }
-
-                        IconButton(
-                            onClick = { isAdvancedExpanded = !isAdvancedExpanded },
-                            modifier = Modifier.testTag("toggle_advanced_button").size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isAdvancedExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                contentDescription = if (isAdvancedExpanded) "Collapse Advanced" else "Expand Advanced"
+                            Text(
+                                text = if (rolloverCleanupEnabled) "Runs on startup & every time app is foregrounded" else "Automatic background job is disabled",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
 
-                    AnimatedVisibility(
-                        visible = isAdvancedExpanded,
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut()
+                    Spacer(modifier = Modifier.height(10.dp))
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+
+                    // Rollover & cleanup toggle switch
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onToggleRolloverCleanupEnabled(!rolloverCleanupEnabled) }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Automatic Rollover & Cleanup",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = if (rolloverCleanupEnabled) "Carries forward tasks and cleans old items automatically" else "Disabled — tasks won't roll over automatically",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (rolloverCleanupEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = rolloverCleanupEnabled,
+                            onCheckedChange = onToggleRolloverCleanupEnabled,
+                            modifier = Modifier.testTag("rollover_cleanup_switch")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "• Removes completed tasks from previous days.\n• Carries forward uncompleted tasks to today.\n• Cleans old occurrences of recurring tasks.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (lastRolloverInfo != null && lastRolloverInfo.first.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 10.dp)
-                                .testTag("maintenance_card")
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                modifier = Modifier.padding(bottom = 10.dp)
-                            )
-
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.AutoMode,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "Daily Rollover & Cleanup",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = if (rolloverCleanupEnabled) "Runs on startup & every time app is foregrounded" else "Automatic background job is disabled",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            // Rollover & cleanup toggle switch
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { onToggleRolloverCleanupEnabled(!rolloverCleanupEnabled) }
-                                    .padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Automatic Rollover & Cleanup",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        text = if (rolloverCleanupEnabled) "Carries forward tasks and cleans old items automatically" else "Disabled — tasks won't roll over automatically",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (rolloverCleanupEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Switch(
-                                    checked = rolloverCleanupEnabled,
-                                    onCheckedChange = onToggleRolloverCleanupEnabled,
-                                    modifier = Modifier.testTag("rollover_cleanup_switch")
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
                             Text(
-                                text = "• Removes completed tasks from previous days.\n• Carries forward uncompleted tasks to today.\n• Cleans old occurrences of recurring tasks.",
-                                style = MaterialTheme.typography.bodySmall,
+                                text = "Last verified rollover:",
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-
-                            if (lastRolloverInfo != null && lastRolloverInfo.first.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Last verified rollover:",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        text = if (lastRolloverInfo.second.isNotBlank()) "${lastRolloverInfo.first} at ${lastRolloverInfo.second}" else lastRolloverInfo.first,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            FilledTonalButton(
-                                onClick = onRunMaintenance,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("run_maintenance_button"),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Refresh,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Run Cleanup & Rollover Now", fontWeight = FontWeight.SemiBold)
-                            }
+                            Text(
+                                text = if (lastRolloverInfo.second.isNotBlank()) "${lastRolloverInfo.first} at ${lastRolloverInfo.second}" else lastRolloverInfo.first,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    FilledTonalButton(
+                        onClick = onRunMaintenance,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("run_maintenance_button"),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Run Cleanup & Rollover Now", fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
         }
 
-        // App Version Footer
+        // Section: About
         item {
-            Box(
+            SettingsSectionHeader(
+                title = "ABOUT",
+                icon = Icons.Default.Info
+            )
+        }
+
+        // App Version Card
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                contentAlignment = Alignment.Center
+                    .testTag("about_card")
             ) {
-                Text(
-                    text = "TaskFlow • Version 2.6.8",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "TaskFlow",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Version 2.7.9",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Daily schedule, calendar, 7-day overview & smart task management",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
     }
@@ -1635,4 +1691,33 @@ private fun CategoryFormDialog(
             }
         }
     )
+}
+
+@Composable
+private fun SettingsSectionHeader(
+    title: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 4.dp, top = 8.dp, bottom = 2.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            letterSpacing = 0.5.sp
+        )
+    }
 }

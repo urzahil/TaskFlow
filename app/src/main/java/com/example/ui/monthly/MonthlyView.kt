@@ -78,7 +78,7 @@ fun MonthlyView(
     onSwitchToDailyView: () -> Unit,
     onAddTaskForDay: () -> Unit,
     currentToday: AppDate = AppDate.today(),
-    hideMonthlyTaskList: Boolean = false,
+    showMonthlyTaskList: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val (year, month) = yearMonth
@@ -220,8 +220,8 @@ fun MonthlyView(
             }
         }
 
-        // Selected Day Details Header & Task List (if not hidden by user preference)
-        if (!hideMonthlyTaskList) {
+        // Selected Day Details Header & Task List (if enabled by user preference)
+        if (showMonthlyTaskList) {
             item {
                 Card(
                     colors = CardDefaults.cardColors(

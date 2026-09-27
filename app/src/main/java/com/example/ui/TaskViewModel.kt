@@ -66,6 +66,9 @@ class TaskViewModel(
         private const val KEY_SHOW_DAILY_PROGRESS = "show_daily_progress"
         private const val KEY_IS_DARK_MODE = "is_dark_mode"
         private const val KEY_USE_DYNAMIC_COLORS = "use_dynamic_colors"
+        private const val KEY_SHOW_MONTHLY_TASK_LIST = "show_monthly_task_list"
+        private const val KEY_SHOW_MONTHLY_VIEW = "show_monthly_view"
+        private const val KEY_SHOW_LIST_VIEW = "show_list_view"
         private const val KEY_HIDE_MONTHLY_TASK_LIST = "hide_monthly_task_list"
         private const val KEY_HIDE_MONTHLY_VIEW = "hide_monthly_view"
         private const val KEY_HIDE_LIST_VIEW = "hide_list_view"
@@ -96,38 +99,71 @@ class TaskViewModel(
         userPrefs?.edit()?.putBoolean(KEY_USE_DYNAMIC_COLORS, enabled)?.apply()
     }
 
-    private val _hideMonthlyTaskList = MutableStateFlow(
-        userPrefs?.getBoolean(KEY_HIDE_MONTHLY_TASK_LIST, false) ?: false
+    private val _showMonthlyTaskList = MutableStateFlow(
+        userPrefs?.let {
+            if (it.contains(KEY_SHOW_MONTHLY_TASK_LIST)) {
+                it.getBoolean(KEY_SHOW_MONTHLY_TASK_LIST, true)
+            } else if (it.contains(KEY_HIDE_MONTHLY_TASK_LIST)) {
+                !it.getBoolean(KEY_HIDE_MONTHLY_TASK_LIST, false)
+            } else {
+                true
+            }
+        } ?: true
     )
-    val hideMonthlyTaskList: StateFlow<Boolean> = _hideMonthlyTaskList.asStateFlow()
+    val showMonthlyTaskList: StateFlow<Boolean> = _showMonthlyTaskList.asStateFlow()
 
-    fun setHideMonthlyTaskList(hide: Boolean) {
-        _hideMonthlyTaskList.value = hide
-        userPrefs?.edit()?.putBoolean(KEY_HIDE_MONTHLY_TASK_LIST, hide)?.apply()
+    fun setShowMonthlyTaskList(show: Boolean) {
+        _showMonthlyTaskList.value = show
+        userPrefs?.edit()
+            ?.putBoolean(KEY_SHOW_MONTHLY_TASK_LIST, show)
+            ?.putBoolean(KEY_HIDE_MONTHLY_TASK_LIST, !show)
+            ?.apply()
     }
 
-    private val _hideMonthlyView = MutableStateFlow(
-        userPrefs?.getBoolean(KEY_HIDE_MONTHLY_VIEW, false) ?: false
+    private val _showMonthlyView = MutableStateFlow(
+        userPrefs?.let {
+            if (it.contains(KEY_SHOW_MONTHLY_VIEW)) {
+                it.getBoolean(KEY_SHOW_MONTHLY_VIEW, true)
+            } else if (it.contains(KEY_HIDE_MONTHLY_VIEW)) {
+                !it.getBoolean(KEY_HIDE_MONTHLY_VIEW, false)
+            } else {
+                true
+            }
+        } ?: true
     )
-    val hideMonthlyView: StateFlow<Boolean> = _hideMonthlyView.asStateFlow()
+    val showMonthlyView: StateFlow<Boolean> = _showMonthlyView.asStateFlow()
 
-    fun setHideMonthlyView(hide: Boolean) {
-        _hideMonthlyView.value = hide
-        userPrefs?.edit()?.putBoolean(KEY_HIDE_MONTHLY_VIEW, hide)?.apply()
-        if (hide && _viewMode.value == ViewMode.MONTHLY) {
+    fun setShowMonthlyView(show: Boolean) {
+        _showMonthlyView.value = show
+        userPrefs?.edit()
+            ?.putBoolean(KEY_SHOW_MONTHLY_VIEW, show)
+            ?.putBoolean(KEY_HIDE_MONTHLY_VIEW, !show)
+            ?.apply()
+        if (!show && _viewMode.value == ViewMode.MONTHLY) {
             _viewMode.value = ViewMode.DAILY
         }
     }
 
-    private val _hideListView = MutableStateFlow(
-        userPrefs?.getBoolean(KEY_HIDE_LIST_VIEW, false) ?: false
+    private val _showListView = MutableStateFlow(
+        userPrefs?.let {
+            if (it.contains(KEY_SHOW_LIST_VIEW)) {
+                it.getBoolean(KEY_SHOW_LIST_VIEW, true)
+            } else if (it.contains(KEY_HIDE_LIST_VIEW)) {
+                !it.getBoolean(KEY_HIDE_LIST_VIEW, false)
+            } else {
+                true
+            }
+        } ?: true
     )
-    val hideListView: StateFlow<Boolean> = _hideListView.asStateFlow()
+    val showListView: StateFlow<Boolean> = _showListView.asStateFlow()
 
-    fun setHideListView(hide: Boolean) {
-        _hideListView.value = hide
-        userPrefs?.edit()?.putBoolean(KEY_HIDE_LIST_VIEW, hide)?.apply()
-        if (hide && _viewMode.value == ViewMode.LIST) {
+    fun setShowListView(show: Boolean) {
+        _showListView.value = show
+        userPrefs?.edit()
+            ?.putBoolean(KEY_SHOW_LIST_VIEW, show)
+            ?.putBoolean(KEY_HIDE_LIST_VIEW, !show)
+            ?.apply()
+        if (!show && _viewMode.value == ViewMode.LIST) {
             _viewMode.value = ViewMode.DAILY
         }
     }
