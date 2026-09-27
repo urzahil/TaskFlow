@@ -10,6 +10,7 @@ import com.example.data.model.CategoryEntity
 import com.example.data.model.TaskEntity
 import com.example.data.repository.TaskRepository
 import com.example.ui.model.DaySummaryUi
+import com.example.ui.model.DayTasksGroupUi
 import com.example.ui.model.TaskFilter
 import com.example.ui.model.TaskItemUi
 import com.example.ui.model.ViewMode
@@ -66,6 +67,8 @@ class TaskViewModel(
         private const val KEY_IS_DARK_MODE = "is_dark_mode"
         private const val KEY_USE_DYNAMIC_COLORS = "use_dynamic_colors"
         private const val KEY_HIDE_MONTHLY_TASK_LIST = "hide_monthly_task_list"
+        private const val KEY_HIDE_MONTHLY_VIEW = "hide_monthly_view"
+        private const val KEY_HIDE_LIST_VIEW = "hide_list_view"
         private const val KEY_ROLLOVER_CLEANUP_ENABLED = "rollover_cleanup_enabled"
         private const val KEY_LAST_ROLLOVER_DATE = "last_rollover_date"
         private const val KEY_LAST_ROLLOVER_TIMESTAMP = "last_rollover_timestamp"
@@ -101,6 +104,32 @@ class TaskViewModel(
     fun setHideMonthlyTaskList(hide: Boolean) {
         _hideMonthlyTaskList.value = hide
         userPrefs?.edit()?.putBoolean(KEY_HIDE_MONTHLY_TASK_LIST, hide)?.apply()
+    }
+
+    private val _hideMonthlyView = MutableStateFlow(
+        userPrefs?.getBoolean(KEY_HIDE_MONTHLY_VIEW, false) ?: false
+    )
+    val hideMonthlyView: StateFlow<Boolean> = _hideMonthlyView.asStateFlow()
+
+    fun setHideMonthlyView(hide: Boolean) {
+        _hideMonthlyView.value = hide
+        userPrefs?.edit()?.putBoolean(KEY_HIDE_MONTHLY_VIEW, hide)?.apply()
+        if (hide && _viewMode.value == ViewMode.MONTHLY) {
+            _viewMode.value = ViewMode.DAILY
+        }
+    }
+
+    private val _hideListView = MutableStateFlow(
+        userPrefs?.getBoolean(KEY_HIDE_LIST_VIEW, false) ?: false
+    )
+    val hideListView: StateFlow<Boolean> = _hideListView.asStateFlow()
+
+    fun setHideListView(hide: Boolean) {
+        _hideListView.value = hide
+        userPrefs?.edit()?.putBoolean(KEY_HIDE_LIST_VIEW, hide)?.apply()
+        if (hide && _viewMode.value == ViewMode.LIST) {
+            _viewMode.value = ViewMode.DAILY
+        }
     }
 
     private val _rolloverCleanupEnabled = MutableStateFlow(
@@ -381,6 +410,53 @@ class TaskViewModel(
                 task = task,
                 date = date,
                 isCompleted = completedTaskIds.contains(task.id)
+            )
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    /**
+     * Tasks for the next 7 days (today and 6 more) for the 7-day List view.
+     */
+    val next7DaysTasks: StateFlow<List<DayTasksGroupUi>> = combine(
+        repository.allTasks,
+        repository.allCompletions,
+        _currentToday,
+        _searchQuery
+    ) { tasks, completions, today, query ->
+        val completionsByDate = completions.groupBy { it.date }
+        (0L..6L).map { offset ->
+            val date = today.plusDays(offset)
+            val dateIso = date.toIsoString()
+            val completedTaskIds = completionsByDate[dateIso]?.map { it.taskId }?.toSet() ?: emptySet()
+
+            val scheduledTasks = tasks.filter { task ->
+                repository.isTaskScheduledOnDate(task, date)
+            }
+
+            var taskItems = scheduledTasks.map { task ->
+                TaskItemUi(
+                    task = task,
+                    date = date,
+                    isCompleted = completedTaskIds.contains(task.id)
+                )
+            }
+
+            if (query.isNotBlank()) {
+                taskItems = taskItems.filter {
+                    it.task.title.contains(query, ignoreCase = true) ||
+                        it.task.description.contains(query, ignoreCase = true) ||
+                        it.task.category.contains(query, ignoreCase = true)
+                }
+            }
+
+            DayTasksGroupUi(
+                date = date,
+                dayName = AppDate.dayOfWeekName(date.dayOfWeek()),
+                tasks = taskItems
             )
         }
     }.stateIn(

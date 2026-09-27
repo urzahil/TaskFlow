@@ -29,5 +29,12 @@ enum class TaskFilter(val label: String) {
 enum class ViewMode(val title: String) {
     DAILY("Daily View"),
     MONTHLY("Monthly Calendar"),
+    LIST("List View"),
     SETTINGS("Settings")
 }
+
+data class DayTasksGroupUi(
+    val date: AppDate,
+    val dayName: String,
+    val tasks: List<TaskItemUi>
+)

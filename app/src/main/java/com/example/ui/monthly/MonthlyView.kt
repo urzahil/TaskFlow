@@ -300,11 +300,18 @@ fun MonthlyView(
                     }
                 }
             } else {
-                items(selectedDayTasks, key = { "${it.task.id}_monthly_${it.date.toIsoString()}" }) { taskItem ->
-                    MonthlyTaskRow(
-                        taskItem = taskItem,
-                        onToggle = { onToggleTask(taskItem) }
-                    )
+                item {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        selectedDayTasks.forEach { taskItem ->
+                            MonthlyTaskRow(
+                                taskItem = taskItem,
+                                onToggle = { onToggleTask(taskItem) }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -321,7 +328,7 @@ fun MonthlyTaskRow(
         modifier = modifier
             .fillMaxWidth()
             .testTag("monthly_task_item_${taskItem.task.id}"),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(6.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (taskItem.isCompleted) {
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
@@ -335,19 +342,19 @@ fun MonthlyTaskRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { onToggle() }
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
                 onClick = onToggle,
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(26.dp)
                     .testTag("toggle_monthly_task_${taskItem.task.id}")
             ) {
                 if (taskItem.isCompleted) {
                     Box(
                         modifier = Modifier
-                            .size(20.dp)
+                            .size(18.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary),
                         contentAlignment = Alignment.Center
@@ -356,7 +363,7 @@ fun MonthlyTaskRow(
                             Icons.Default.Check,
                             contentDescription = "Completed",
                             tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(12.dp)
                         )
                     }
                 } else {
@@ -364,16 +371,16 @@ fun MonthlyTaskRow(
                         Icons.Default.RadioButtonUnchecked,
                         contentDescription = "Mark Complete",
                         tint = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
 
             Text(
                 text = taskItem.task.title,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.5.sp),
                 fontWeight = if (taskItem.isCompleted) FontWeight.Normal else FontWeight.Medium,
                 textDecoration = if (taskItem.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
                 color = if (taskItem.isCompleted) {

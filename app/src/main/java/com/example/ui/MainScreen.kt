@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Today
+import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
@@ -65,6 +66,7 @@ import com.example.data.model.AppDate
 import com.example.ui.components.GoogleError10Dialog
 import com.example.ui.components.TaskAddEditSheet
 import com.example.ui.daily.DailyView
+import com.example.ui.list.ListView
 import com.example.ui.model.ViewMode
 import com.example.ui.monthly.MonthlyView
 import com.example.ui.settings.SettingsScreen
@@ -102,6 +104,9 @@ fun MainScreen(
     val isDarkMode by viewModel.isDarkMode.collectAsStateWithLifecycle()
     val useDynamicColors by viewModel.useDynamicColors.collectAsStateWithLifecycle()
     val hideMonthlyTaskList by viewModel.hideMonthlyTaskList.collectAsStateWithLifecycle()
+    val hideMonthlyView by viewModel.hideMonthlyView.collectAsStateWithLifecycle()
+    val hideListView by viewModel.hideListView.collectAsStateWithLifecycle()
+    val next7DaysTasks by viewModel.next7DaysTasks.collectAsStateWithLifecycle()
     val currentToday by viewModel.currentToday.collectAsStateWithLifecycle()
     val lastRolloverInfo by viewModel.lastRolloverInfo.collectAsStateWithLifecycle()
     val rolloverCleanupEnabled by viewModel.rolloverCleanupEnabled.collectAsStateWithLifecycle()
@@ -203,6 +208,10 @@ fun MainScreen(
     }
 
     BackHandler(enabled = !isSearchActive && viewMode == ViewMode.MONTHLY) {
+        viewModel.setViewMode(ViewMode.DAILY)
+    }
+
+    BackHandler(enabled = !isSearchActive && viewMode == ViewMode.LIST) {
         viewModel.setViewMode(ViewMode.DAILY)
     }
 
@@ -330,49 +339,49 @@ fun MainScreen(
                             }
                         }
 
-                        // View Mode Tabs: Daily View vs Monthly Calendar with reduced padding
-                        TabRow(
-                            selectedTabIndex = if (viewMode == ViewMode.MONTHLY) 1 else 0,
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            contentColor = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.testTag("view_mode_tab_row")
-                        ) {
-                            Tab(
-                                selected = viewMode == ViewMode.DAILY,
-                                onClick = { viewModel.setViewMode(ViewMode.DAILY) },
-                                modifier = Modifier
-                                    .testTag("tab_daily_view")
-                                    .height(36.dp),
-                                text = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            Icons.AutoMirrored.Filled.FormatListBulleted,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Daily", fontWeight = FontWeight.SemiBold)
-                                    }
+                        // View Mode Tabs: Daily, Monthly, and List views with visibility controlled by user settings
+                        val availableTabs = remember(hideMonthlyView, hideListView) {
+                            buildList {
+                                add(Triple(ViewMode.DAILY, "Daily", Icons.AutoMirrored.Filled.FormatListBulleted to "tab_daily_view"))
+                                if (!hideMonthlyView) {
+                                    add(Triple(ViewMode.MONTHLY, "Monthly", Icons.Default.CalendarMonth to "tab_monthly_view"))
                                 }
-                            )
-                            Tab(
-                                selected = viewMode == ViewMode.MONTHLY,
-                                onClick = { viewModel.setViewMode(ViewMode.MONTHLY) },
-                                modifier = Modifier
-                                    .testTag("tab_monthly_view")
-                                    .height(36.dp),
-                                text = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            Icons.Default.CalendarMonth,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Monthly", fontWeight = FontWeight.SemiBold)
-                                    }
+                                if (!hideListView) {
+                                    add(Triple(ViewMode.LIST, "List", Icons.Default.ViewAgenda to "tab_list_view"))
                                 }
-                            )
+                            }
+                        }
+
+                        if (availableTabs.size > 1) {
+                            val selectedTabIndex = availableTabs.indexOfFirst { it.first == viewMode }.coerceAtLeast(0)
+                            TabRow(
+                                selectedTabIndex = selectedTabIndex,
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                contentColor = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.testTag("view_mode_tab_row")
+                            ) {
+                                availableTabs.forEach { (mode, title, iconAndTag) ->
+                                    val (icon, tag) = iconAndTag
+                                    Tab(
+                                        selected = viewMode == mode,
+                                        onClick = { viewModel.setViewMode(mode) },
+                                        modifier = Modifier
+                                            .testTag(tag)
+                                            .height(36.dp),
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    icon,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(title, fontWeight = FontWeight.SemiBold)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -433,6 +442,12 @@ fun MainScreen(
                         onAddTaskForDay = { viewModel.openAddTaskDialog() },
                         currentToday = currentToday,
                         hideMonthlyTaskList = hideMonthlyTaskList
+                    )
+                }
+                ViewMode.LIST -> {
+                    ListView(
+                        days = next7DaysTasks,
+                        onToggleTask = { viewModel.toggleTaskCompletion(it) }
                     )
                 }
                 ViewMode.SETTINGS -> {
@@ -499,7 +514,11 @@ fun MainScreen(
                         useDynamicColors = useDynamicColors,
                         onToggleDynamicColors = { viewModel.setUseDynamicColors(it) },
                         hideMonthlyTaskList = hideMonthlyTaskList,
-                        onToggleHideMonthlyTaskList = { viewModel.setHideMonthlyTaskList(it) }
+                        onToggleHideMonthlyTaskList = { viewModel.setHideMonthlyTaskList(it) },
+                        hideMonthlyView = hideMonthlyView,
+                        onToggleHideMonthlyView = { viewModel.setHideMonthlyView(it) },
+                        hideListView = hideListView,
+                        onToggleHideListView = { viewModel.setHideListView(it) }
                     )
                 }
             }

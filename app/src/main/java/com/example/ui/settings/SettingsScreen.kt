@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -117,6 +118,10 @@ fun SettingsScreen(
     onToggleDynamicColors: (Boolean) -> Unit = {},
     hideMonthlyTaskList: Boolean = false,
     onToggleHideMonthlyTaskList: (Boolean) -> Unit = {},
+    hideMonthlyView: Boolean = false,
+    onToggleHideMonthlyView: (Boolean) -> Unit = {},
+    hideListView: Boolean = false,
+    onToggleHideListView: (Boolean) -> Unit = {},
     rolloverCleanupEnabled: Boolean = true,
     onToggleRolloverCleanupEnabled: (Boolean) -> Unit = {},
     lastRolloverInfo: Pair<String, String>? = null,
@@ -550,6 +555,114 @@ fun SettingsScreen(
                             checked = showDailyProgress,
                             onCheckedChange = onToggleDailyProgress,
                             modifier = Modifier.testTag("toggle_daily_progress_switch")
+                        )
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // Hide Monthly View
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggleHideMonthlyView(!hideMonthlyView) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CalendarMonth,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Hide Monthly View",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Hide the Monthly tab and calendar from navigation",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = hideMonthlyView,
+                            onCheckedChange = onToggleHideMonthlyView,
+                            modifier = Modifier.testTag("toggle_hide_monthly_view_switch")
+                        )
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // Hide List View
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggleHideListView(!hideListView) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ViewAgenda,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Hide List View",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Hide the 7-day List tab from navigation",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = hideListView,
+                            onCheckedChange = onToggleHideListView,
+                            modifier = Modifier.testTag("toggle_hide_list_view_switch")
                         )
                     }
 
@@ -1238,7 +1351,7 @@ fun SettingsScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "TaskFlow • Version 2.5.8",
+                    text = "TaskFlow • Version 2.6.8",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
