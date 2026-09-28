@@ -386,11 +386,19 @@ class TaskViewModel(
                 ?.apply()
             _lastRolloverInfo.value = Pair(targetDate.toIsoString(), nowTimeFormatted)
 
-            if (result.cleanedCount > 0 || result.movedCount > 0 || result.cleanedRecurringOccurrences > 0) {
+            val movedCount = result.movedCount
+            val cleanedCount = result.cleanedCount
+
+            if (movedCount > 0 || cleanedCount > 0) {
                 val details = mutableListOf<String>()
-                if (result.cleanedCount > 0) details.add("cleaned ${result.cleanedCount} completed task(s)")
-                if (result.movedCount > 0) details.add("moved ${result.movedCount} uncompleted task(s) to today")
-                if (result.cleanedRecurringOccurrences > 0) details.add("removed ${result.cleanedRecurringOccurrences} old recurring occurrence(s)")
+                if (movedCount > 0) {
+                    val taskWord = if (movedCount == 1) "task" else "tasks"
+                    details.add("moved $movedCount uncompleted $taskWord to today")
+                }
+                if (cleanedCount > 0) {
+                    val taskWord = if (cleanedCount == 1) "task" else "tasks"
+                    details.add("cleaned $cleanedCount completed $taskWord")
+                }
                 _maintenanceMessage.value = details.joinToString(", ").replaceFirstChar { it.uppercase() } + "."
             } else if (!isForegroundCheck) {
                 _maintenanceMessage.value = "Tasks are up to date for today. No rollover needed."

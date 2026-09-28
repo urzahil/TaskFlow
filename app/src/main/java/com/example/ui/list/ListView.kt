@@ -45,37 +45,57 @@ fun ListView(
     onToggleTask: (TaskItemUi) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .testTag("list_view_container"),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        itemsIndexed(days, key = { _, dayGroup -> dayGroup.date.toIsoString() }) { index, dayGroup ->
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("list_day_group_$index")
-            ) {
-                // Day name header: Only day name, no date
-                Text(
-                    text = dayGroup.dayName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 4.dp)
-                )
+    val daysWithTasks = days.filter { it.tasks.isNotEmpty() }
 
-                // Tasks for this day, indented with respect to the day name
-                if (dayGroup.tasks.isEmpty()) {
+    if (daysWithTasks.isEmpty()) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(32.dp)
+                .testTag("list_view_empty_state"),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "No upcoming tasks",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "No tasks scheduled for the next 7 days.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+        }
+    } else {
+        LazyColumn(
+            modifier = modifier
+                .fillMaxSize()
+                .testTag("list_view_container"),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            itemsIndexed(daysWithTasks, key = { _, dayGroup -> dayGroup.date.toIsoString() }) { index, dayGroup ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("list_day_group_$index")
+                ) {
+                    // Day name header: Only day name, no date
                     Text(
-                        text = "No tasks",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.padding(start = 20.dp, top = 2.dp, bottom = 4.dp)
+                        text = dayGroup.dayName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 4.dp)
                     )
-                } else {
+
+                    // Tasks for this day, indented with respect to the day name
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()

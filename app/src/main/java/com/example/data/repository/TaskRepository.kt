@@ -107,11 +107,12 @@ class TaskRepository(private val taskDao: TaskDao) {
     suspend fun cleanupAndRolloverTasks(today: AppDate = AppDate.today()): RolloverResult {
         val todayIso = today.toIsoString()
         val pastTasks = taskDao.getPastNonRecurringTasks(todayIso)
-        val completedTaskIds = taskDao.getPastCompletedTaskIds(todayIso).toSet()
+        val allCompletedTaskIds = taskDao.getAllCompletedTaskIds().toSet()
+        val allCompletions = taskDao.getAllCompletionsList()
+        val completionKeys = allCompletions.map { "${it.taskId}_${it.date}" }.toSet()
 
         var cleanedCount = 0
         var movedCount = 0
-        var cleanedRecurringOccurrences = 0
 
         val tasksToDelete = mutableListOf<TaskEntity>()
         val tasksToUpdate = mutableListOf<TaskEntity>()
@@ -119,7 +120,7 @@ class TaskRepository(private val taskDao: TaskDao) {
 
         // 1. Clean completed non-recurring tasks and roll forward uncompleted tasks
         for (task in pastTasks) {
-            if (task.id in completedTaskIds) {
+            if (task.id in allCompletedTaskIds) {
                 // Task was completed in the past: clean it up
                 tasksToDelete.add(task)
                 taskIdsForCompletionDeletion.add(task.id)
@@ -151,12 +152,12 @@ class TaskRepository(private val taskDao: TaskDao) {
                 }
             }
 
-            // If start date is before today, delete old occurrences by moving start date to the first occurrence on or after today
+            // If start date is before today, advance start date to today or next occurrence
             if (start < today) {
                 val nextOccurrence: AppDate
                 val validDaysOfWeek = task.parsedDaysOfWeek()
                 if (validDaysOfWeek.isNotEmpty()) {
-                    // 1. Bound search to at most 7 days starting from today
+                    // Bound search to at most 7 days starting from today
                     var candidate = today
                     var found = false
                     for (step in 0..7) {
@@ -167,45 +168,12 @@ class TaskRepository(private val taskDao: TaskDao) {
                         candidate = candidate.plusDays(1)
                     }
                     nextOccurrence = if (found) candidate else today
-
-                    // 2. Count past occurrences between start and today (exclusive of today)
-                    val pastDaysCount = today.minusDays(1).daysBetween(start)
-                    if (pastDaysCount >= 0) {
-                        val wholeWeeks = pastDaysCount / 7
-                        val remainingDays = (pastDaysCount % 7).toInt()
-                        var count = wholeWeeks * validDaysOfWeek.size
-                        for (offset in 0..remainingDays) {
-                            val d = start.plusDays(offset.toLong())
-                            if (d.dayOfWeek() in validDaysOfWeek) {
-                                count++
-                            }
-                        }
-                        cleanedRecurringOccurrences += count.toInt()
-                    }
-                } else if (!task.recurrenceDaysOfWeek.isNullOrBlank()) {
-                    // Invalid/unparseable recurrenceDaysOfWeek data (e.g. "8"): fallback safely to interval or daily
-                    val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
-                    val diffDays = today.daysBetween(start)
-                    val remainder = diffDays % interval
-                    val daysToNext = if (remainder == 0L) 0L else (interval - remainder)
-                    nextOccurrence = today.plusDays(daysToNext)
-
-                    val pastDaysCount = today.minusDays(1).daysBetween(start)
-                    if (pastDaysCount >= 0) {
-                        cleanedRecurringOccurrences += (pastDaysCount / interval + 1).toInt()
-                    }
                 } else {
                     val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
                     val diffDays = today.daysBetween(start)
                     val remainder = diffDays % interval
                     val daysToNext = if (remainder == 0L) 0L else (interval - remainder)
                     nextOccurrence = today.plusDays(daysToNext)
-
-                    // Count past occurrences being removed
-                    val pastDaysCount = today.minusDays(1).daysBetween(start)
-                    if (pastDaysCount >= 0) {
-                        cleanedRecurringOccurrences += (pastDaysCount / interval + 1).toInt()
-                    }
                 }
 
                 // If next occurrence is past optional end date, recurring task is completed
@@ -217,6 +185,27 @@ class TaskRepository(private val taskDao: TaskDao) {
                         cleanedCount++
                         continue
                     }
+                }
+
+                // Check if this recurring task had an uncompleted scheduled occurrence before today
+                // When nextOccurrence == today, it rolls over to today
+                var hadUncompletedPastOccurrence = false
+                val pastDaysToCheck = today.minusDays(1).daysBetween(start)
+                if (pastDaysToCheck >= 0) {
+                    val checkDays = minOf(pastDaysToCheck, 30L)
+                    for (offset in 0L..checkDays) {
+                        val d = today.minusDays(1 + offset)
+                        if (d >= start && isTaskScheduledOnDate(task, d)) {
+                            if ("${task.id}_${d.toIsoString()}" !in completionKeys) {
+                                hadUncompletedPastOccurrence = true
+                                break
+                            }
+                        }
+                    }
+                }
+
+                if (nextOccurrence == today && hadUncompletedPastOccurrence) {
+                    movedCount++
                 }
 
                 tasksToUpdate.add(task.copy(startDate = nextOccurrence.toIsoString()))
@@ -234,7 +223,7 @@ class TaskRepository(private val taskDao: TaskDao) {
         return RolloverResult(
             cleanedCount = cleanedCount,
             movedCount = movedCount,
-            cleanedRecurringOccurrences = cleanedRecurringOccurrences
+            cleanedRecurringOccurrences = 0
         )
     }
 

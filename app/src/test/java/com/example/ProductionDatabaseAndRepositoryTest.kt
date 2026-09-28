@@ -70,10 +70,10 @@ class ProductionDatabaseAndRepositoryTest {
         """.trimIndent()
         val sqlCreateCompletionsV3 = """
             CREATE TABLE IF NOT EXISTS task_completions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                 taskId INTEGER NOT NULL,
                 date TEXT NOT NULL,
-                completedAt INTEGER NOT NULL
+                completedAt INTEGER NOT NULL,
+                PRIMARY KEY (taskId, date)
             )
         """.trimIndent()
         val sqlCreateCategoriesV3 = """
@@ -98,7 +98,7 @@ class ProductionDatabaseAndRepositoryTest {
                         "VALUES (101, 'Existing V3 Task', 'Description', 'General', 'High', 4282098422, 0, 1, '2026-09-25', NULL, 1000)"
                 )
                 db.execSQL(
-                    "INSERT INTO task_completions (id, taskId, date, completedAt) VALUES (501, 101, '2026-09-25', 1005)"
+                    "INSERT INTO task_completions (taskId, date, completedAt) VALUES (101, '2026-09-25', 1005)"
                 )
                 db.execSQL(
                     "INSERT INTO categories (name, colorHex, iconName, isDefault) VALUES ('Work', 4282098422, 'work', 0)"
