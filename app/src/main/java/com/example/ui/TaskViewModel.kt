@@ -407,6 +407,7 @@ class TaskViewModel(
                 _maintenanceMessage.value = "Tasks are up to date for today. No rollover needed."
             }
             onComplete?.invoke(result.cleanedCount, result.movedCount, result.cleanedRecurringOccurrences)
+            }
         }
     }
 
