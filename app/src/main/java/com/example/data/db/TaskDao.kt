@@ -45,6 +45,12 @@ interface TaskDao {
     @Delete
     suspend fun deleteTask(task: TaskEntity)
 
+    @Transaction
+    suspend fun deleteTaskWithCompletions(taskId: Long) {
+        deleteCompletionsForTask(taskId)
+        deleteTaskById(taskId)
+    }
+
     @Query("DELETE FROM tasks WHERE id = :taskId")
     suspend fun deleteTaskById(taskId: Long)
 
@@ -69,6 +75,27 @@ interface TaskDao {
 
     @Query("DELETE FROM categories WHERE name = :name")
     suspend fun deleteCategoryByName(name: String)
+
+    @Transaction
+    suspend fun updateCategoryAtomically(
+        oldName: String,
+        newCategory: CategoryEntity,
+        newColor: Long
+    ) {
+        insertCategory(newCategory)
+        if (oldName == newCategory.name) {
+            updateTasksColorByCategory(newCategory.name, newColor)
+        } else {
+            updateTasksCategory(oldName, newCategory.name, newColor)
+            deleteCategoryByName(oldName)
+        }
+    }
+
+    @Transaction
+    suspend fun deleteCategoryAtomically(categoryName: String) {
+        reassignCategoryTasks(categoryName)
+        deleteCategoryByName(categoryName)
+    }
 
     @Query("UPDATE tasks SET category = 'General', colorHex = 4282098422 WHERE category = :categoryName")
     suspend fun reassignCategoryTasks(categoryName: String)

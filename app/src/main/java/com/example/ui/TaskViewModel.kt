@@ -227,6 +227,7 @@ class TaskViewModel(
     }
 
     private val driveBackupMutex = Mutex()
+    private val rolloverMutex = Mutex()
     private val autoBackupChannel = Channel<Unit>(Channel.CONFLATED)
     private var debounceJob: Job? = null
     @Volatile
@@ -379,7 +380,8 @@ class TaskViewModel(
             return
         }
         viewModelScope.launch {
-            val result = repository.cleanupAndRolloverTasks(targetDate)
+            rolloverMutex.withLock {
+                val result = repository.cleanupAndRolloverTasks(targetDate)
             val nowTimeFormatted = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
             userPrefs?.edit()
                 ?.putString(KEY_LAST_ROLLOVER_DATE, targetDate.toIsoString())
@@ -405,6 +407,7 @@ class TaskViewModel(
                 _maintenanceMessage.value = "Tasks are up to date for today. No rollover needed."
             }
             onComplete?.invoke(result.cleanedCount, result.movedCount, result.cleanedRecurringOccurrences)
+            }
         }
     }
 
@@ -996,7 +999,9 @@ class TaskViewModel(
         viewModelScope.launch {
             _driveSyncState.value = _driveSyncState.value.copy(isSyncing = true, syncMessage = null)
             try {
-                val result = driveBackupManager.restoreFromDrive()
+                val result = driveBackupMutex.withLock {
+                    driveBackupManager.restoreFromDrive()
+                }
                 if (result.isSuccess) {
                     val res = result.getOrThrow()
                     refreshDriveState(
@@ -1024,7 +1029,9 @@ class TaskViewModel(
         viewModelScope.launch {
             val currentTasks = repository.allTasks.first()
             if (currentTasks.isEmpty()) {
-                val result = driveBackupManager.restoreFromDrive()
+                val result = driveBackupMutex.withLock {
+                    driveBackupManager.restoreFromDrive()
+                }
                 val res = result.getOrNull()
                 if (res != null && (res.taskCount > 0 || res.categoryCount > 0)) {
                     refreshDriveState(
@@ -1056,7 +1063,9 @@ class TaskViewModel(
         viewModelScope.launch {
             _driveSyncState.value = _driveSyncState.value.copy(isSyncing = true, syncMessage = null)
             try {
-                val result = driveBackupManager.restoreFromJson(jsonString)
+                val result = driveBackupMutex.withLock {
+                    driveBackupManager.restoreFromJson(jsonString)
+                }
                 if (result.isSuccess) {
                     val res = result.getOrThrow()
                     refreshDriveState(
