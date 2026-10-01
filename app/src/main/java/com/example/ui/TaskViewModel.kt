@@ -938,9 +938,7 @@ class TaskViewModel(
                     val tasks = repository.allTasks.first()
                     val completions = repository.allCompletions.first()
                     val categories = repository.allCategories.first()
-                    val result = driveBackupMutex.withLock {
-                        driveBackupManager.backupToDrive(tasks, completions, categories)
-                    }
+                    val result = driveBackupManager.backupToDrive(tasks, completions, categories)
                     if (result.isSuccess) {
                         refreshDriveState()
                     } else {
