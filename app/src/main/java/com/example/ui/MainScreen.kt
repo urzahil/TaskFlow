@@ -205,7 +205,7 @@ fun MainScreen(
     }
 
     BackHandler(enabled = !isSearchActive && viewMode == ViewMode.SETTINGS) {
-        viewModel.setViewMode(ViewMode.DAILY)
+        viewModel.closeSettings()
     }
 
     BackHandler(enabled = !isSearchActive && viewMode == ViewMode.MONTHLY) {
@@ -240,7 +240,7 @@ fun MainScreen(
                     ) {
                         if (viewMode == ViewMode.SETTINGS) {
                             IconButton(
-                                onClick = { viewModel.setViewMode(ViewMode.DAILY) },
+                                onClick = { viewModel.closeSettings() },
                                 modifier = Modifier
                                     .testTag("back_from_settings_button")
                                     .size(36.dp)
@@ -302,9 +302,11 @@ fun MainScreen(
                         }
                         IconButton(
                             onClick = {
-                                viewModel.setViewMode(
-                                    if (viewMode == ViewMode.SETTINGS) ViewMode.DAILY else ViewMode.SETTINGS
-                                )
+                                if (viewMode == ViewMode.SETTINGS) {
+                                    viewModel.closeSettings()
+                                } else {
+                                    viewModel.setViewMode(ViewMode.SETTINGS)
+                                }
                             },
                             modifier = Modifier.testTag("settings_top_button")
                         ) {

@@ -240,6 +240,7 @@ class TaskViewModel(
 
     private val _viewMode = MutableStateFlow(getInitialViewMode())
     val viewMode: StateFlow<ViewMode> = _viewMode.asStateFlow()
+    private var viewModeBeforeSettings = _viewMode.value
 
     private val _taskFilter = MutableStateFlow(TaskFilter.ALL)
     val taskFilter: StateFlow<TaskFilter> = _taskFilter.asStateFlow()
@@ -793,7 +794,19 @@ class TaskViewModel(
     }
 
     fun setViewMode(mode: ViewMode) {
+        if (mode == ViewMode.SETTINGS && _viewMode.value != ViewMode.SETTINGS) {
+            viewModeBeforeSettings = _viewMode.value
+        }
         _viewMode.value = mode
+    }
+
+    fun closeSettings() {
+        if (_viewMode.value != ViewMode.SETTINGS) return
+        _viewMode.value = when (viewModeBeforeSettings) {
+            ViewMode.MONTHLY -> if (_showMonthlyView.value) ViewMode.MONTHLY else ViewMode.DAILY
+            ViewMode.LIST -> if (_showListView.value) ViewMode.LIST else ViewMode.DAILY
+            else -> ViewMode.DAILY
+        }
     }
 
     fun setFilter(filter: TaskFilter) {
