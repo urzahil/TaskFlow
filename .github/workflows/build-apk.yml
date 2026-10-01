@@ -3,7 +3,7 @@ name: Build TaskFlow APK
 on:
   push:
     branches:
-      - fix/data-safety-optimizations
+      - main
   workflow_dispatch:
 
 jobs:
