@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.taskflow.plvqrm"
     minSdk = 24
     targetSdk = 36
-    versionCode = 18
-    versionName = "2.8.12"
+    versionCode = 19
+    versionName = "2.8.13"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -34,11 +34,11 @@ android {
         keyPassword = System.getenv("KEY_PASSWORD")
       }
     }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
+    getByName("debug") {
+      val projectDebugKeystore = file("${rootDir}/debug.keystore")
+      if (projectDebugKeystore.exists()) {
+        storeFile = projectDebugKeystore
+      }
     }
   }
 
@@ -50,10 +50,10 @@ android {
       signingConfig = if (signingConfigs.findByName("release") != null) {
         signingConfigs.getByName("release")
       } else {
-        signingConfigs.getByName("debugConfig")
+        signingConfigs.getByName("debug")
       }
     }
-    debug { signingConfig = signingConfigs.getByName("debugConfig") }
+    debug { signingConfig = signingConfigs.getByName("debug") }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11

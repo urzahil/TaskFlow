@@ -1,6 +1,8 @@
 package com.example
 
 import android.content.Context
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelProvider
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.db.AppDatabase
@@ -10,6 +12,12 @@ import com.example.data.model.TaskCompletionEntity
 import com.example.data.model.TaskEntity
 import com.example.data.repository.TaskRepository
 import com.example.ui.TaskViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -23,6 +31,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.system.measureTimeMillis
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class TaskViewModelSchedulePerformanceTest {
@@ -32,21 +41,32 @@ class TaskViewModelSchedulePerformanceTest {
     private lateinit var repository: TaskRepository
     private lateinit var driveBackupManager: GoogleDriveBackupManager
     private lateinit var viewModel: TaskViewModel
+    private val viewModelStore = ViewModelStore()
 
     @Before
     fun setup() {
+        Dispatchers.setMain(UnconfinedTestDispatcher())
         context = ApplicationProvider.getApplicationContext()
+        context.getSharedPreferences("taskflow_user_prefs", Context.MODE_PRIVATE).edit()
+            .putBoolean("rollover_cleanup_enabled", false).commit()
         database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
             .allowMainThreadQueries()
             .build()
         repository = TaskRepository(database.taskDao())
         driveBackupManager = GoogleDriveBackupManager(context, repository)
-        viewModel = TaskViewModel(repository, driveBackupManager, context)
+        // Keep startup seeding from racing the test fixtures.
+        runBlocking {
+            repository.insertTask(TaskEntity(id = 9999, title = "Fixture", startDate = "2099-01-01"))
+        }
+        viewModel = ViewModelProvider(viewModelStore, TaskViewModel.Factory(repository, driveBackupManager, context))
+            .get(TaskViewModel::class.java)
     }
 
     @After
     fun tearDown() {
+        viewModelStore.clear()
         database.close()
+        Dispatchers.resetMain()
     }
 
     @Test
@@ -99,8 +119,8 @@ class TaskViewModelSchedulePerformanceTest {
         viewModel.selectDate(AppDate(2026, 9, 25))
 
         val elapsedDailyTasks = measureTimeMillis {
-            val dailyList = viewModel.dailyTasks.first()
-            val stats = viewModel.dailyStats.first()
+            val dailyList = withTimeout(10_000) { viewModel.dailyTasks.first { it.isNotEmpty() } }
+            val stats = withTimeout(10_000) { viewModel.dailyStats.first { it.total == dailyList.size } }
             assertTrue(dailyList.isNotEmpty())
             assertTrue(stats.total > 0)
             assertEquals(dailyList.size, stats.total)
@@ -112,7 +132,7 @@ class TaskViewModelSchedulePerformanceTest {
         viewModel.selectMonth(2026, 9)
 
         val elapsedMonthSummary = measureTimeMillis {
-            val summaries = viewModel.monthDaysSummary.first()
+            val summaries = withTimeout(10_000) { viewModel.monthDaysSummary.first { it.containsKey("2026-09-25") } }
             assertTrue(summaries.isNotEmpty())
             val sep25Summary = summaries["2026-09-25"]
             if (sep25Summary != null) {
@@ -123,6 +143,26 @@ class TaskViewModelSchedulePerformanceTest {
         // Both operations should complete well under reasonable threshold even with 1500 tasks
         assertTrue("Daily tasks evaluation should be fast ($elapsedDailyTasks ms)", elapsedDailyTasks < 2500)
         assertTrue("Month summary evaluation should be fast ($elapsedMonthSummary ms)", elapsedMonthSummary < 2500)
+    }
+
+    @Test
+    fun invalidWeekdaysUseTheSameIntervalInDailyWeeklyAndMonthlyViews() = runBlocking {
+        val date = AppDate(2026, 9, 25)
+        repository.insertTask(TaskEntity(
+            id = 1, title = "Invalid weekdays", isRecurring = true,
+            recurrenceDays = 3, recurrenceDaysOfWeek = "0,8,invalid",
+            startDate = "2026-09-22"
+        ))
+        viewModel.selectDate(date)
+        viewModel.setViewMode(com.example.ui.model.ViewMode.MONTHLY)
+        val daily = withTimeout(10_000) { viewModel.dailyTasks.first { it.size == 1 } }
+        val weekly = withTimeout(10_000) { viewModel.weekDaysSummary.first { it.containsKey(date.toIsoString()) } }
+        val monthly = withTimeout(10_000) { viewModel.monthDaysSummary.first { it.containsKey(date.toIsoString()) } }
+        assertEquals(1, daily.size)
+        assertEquals(1, weekly.getValue(date.toIsoString()).totalTasks)
+        assertEquals(1, monthly.getValue(date.toIsoString()).totalTasks)
+        assertFalse(monthly.containsKey("2026-09-24"))
+        assertEquals(1, monthly.getValue("2026-09-28").totalTasks)
     }
 
     @Test

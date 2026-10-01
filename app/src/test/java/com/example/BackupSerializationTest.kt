@@ -1,6 +1,8 @@
 package com.example
 
 import android.content.Context
+import androidx.room.Room
+import org.junit.After
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.db.AppDatabase
 import com.example.data.drive.GoogleDriveBackupManager
@@ -25,13 +27,57 @@ class BackupSerializationTest {
 
     private lateinit var backupManager: GoogleDriveBackupManager
     private lateinit var repository: TaskRepository
+    private lateinit var database: AppDatabase
 
     @Before
     fun setup() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val db = AppDatabase.getInstance(context)
-        repository = TaskRepository(db.taskDao())
+        database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+        repository = TaskRepository(database.taskDao())
         backupManager = GoogleDriveBackupManager(context, repository)
+    }
+
+    @After
+    fun tearDown() {
+        database.close()
+    }
+
+    @Test
+    fun malformedBackupsNeverEraseExistingData() = runBlocking {
+        val task = TaskEntity(id = 42, title = "Keep me", startDate = "2026-10-01")
+        val category = CategoryEntity("General", 0xFF3B82F6, "general", true)
+        val completion = TaskCompletionEntity(42, "2026-10-01")
+        repository.clearAndRestoreAll(listOf(task), listOf(completion), listOf(category))
+        val valid = backupManager.exportBackupJson(listOf(task), listOf(completion), listOf(category))
+        val invalidBackups = listOf(
+            "{}",
+            """{"tasks":{}}""",
+            """{"tasks":[],"completions":{}}""",
+            """{"tasks":[],"categories":null}""",
+            """{"app":"AnotherApp","tasks":[]}""",
+            """{"version":999,"tasks":[]}""",
+            valid.replace("2026-10-01", "2026-02-31"),
+            org.json.JSONObject(valid).apply {
+                getJSONArray("tasks").put(getJSONArray("tasks").getJSONObject(0))
+            }.toString(),
+            org.json.JSONObject(valid).apply {
+                getJSONArray("completions").getJSONObject(0).put("taskId", 999)
+            }.toString()
+        )
+        for (json in invalidBackups) {
+            assertTrue("Should reject malformed backup: $json", backupManager.restoreFromJson(json).isFailure)
+            assertEquals(listOf(task), repository.allTasks.first())
+            assertEquals(listOf(completion), repository.allCompletions.first())
+            assertEquals(listOf(category), repository.allCategories.first())
+        }
+    }
+
+    @Test
+    fun intentionallyEmptyExportCanBeRestored() = runBlocking {
+        repository.insertTask(TaskEntity(title = "Remove me", startDate = "2026-10-01"))
+        val json = backupManager.exportBackupJson(emptyList(), emptyList())
+        assertTrue(backupManager.restoreFromJson(json).isSuccess)
+        assertTrue(repository.allTasks.first().isEmpty())
     }
 
     @Test
