@@ -27,13 +27,11 @@ class TaskRepository(private val taskDao: TaskDao) {
     suspend fun updateTask(task: TaskEntity) = taskDao.updateTask(task)
 
     suspend fun deleteTask(task: TaskEntity) {
-        taskDao.deleteCompletionsForTask(task.id)
-        taskDao.deleteTask(task)
+        taskDao.deleteTaskWithCompletions(task.id)
     }
 
     suspend fun deleteTaskById(taskId: Long) {
-        taskDao.deleteCompletionsForTask(taskId)
-        taskDao.deleteTaskById(taskId)
+        taskDao.deleteTaskWithCompletions(taskId)
     }
 
     suspend fun insertCategory(category: CategoryEntity) = taskDao.insertCategory(category)
@@ -53,37 +51,20 @@ class TaskRepository(private val taskDao: TaskDao) {
         newIconName: String,
         isDefault: Boolean
     ) {
-        if (oldName == newName) {
-            taskDao.insertCategory(
-                CategoryEntity(
-                    name = newName,
-                    colorHex = newColorHex,
-                    iconName = newIconName,
-                    isDefault = isDefault
-                )
-            )
-            taskDao.updateTasksColorByCategory(newName, newColorHex)
-        } else {
-            taskDao.insertCategory(
-                CategoryEntity(
-                    name = newName,
-                    colorHex = newColorHex,
-                    iconName = newIconName,
-                    isDefault = isDefault
-                )
-            )
-            taskDao.updateTasksCategory(
-                oldCategory = oldName,
-                newCategory = newName,
-                newColor = newColorHex
-            )
-            taskDao.deleteCategoryByName(oldName)
-        }
+        taskDao.updateCategoryAtomically(
+            oldName = oldName,
+            newCategory = CategoryEntity(
+                name = newName,
+                colorHex = newColorHex,
+                iconName = newIconName,
+                isDefault = isDefault
+            ),
+            newColor = newColorHex
+        )
     }
 
     suspend fun deleteCategory(categoryName: String) {
-        taskDao.reassignCategoryTasks(categoryName)
-        taskDao.deleteCategoryByName(categoryName)
+        taskDao.deleteCategoryAtomically(categoryName)
     }
 
     suspend fun toggleCompletion(taskId: Long, dateIso: String, currentlyCompleted: Boolean) {
