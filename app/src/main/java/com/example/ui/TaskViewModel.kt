@@ -605,9 +605,7 @@ class TaskViewModel(
             } else null
 
             val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
-            val daysOfWeekSet = if (!task.recurrenceDaysOfWeek.isNullOrBlank()) {
-                task.recurrenceDaysOfWeek.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
-            } else null
+            val daysOfWeekSet = task.parsedDaysOfWeek()
 
             ParsedTaskSchedule(
                 id = task.id,
@@ -689,9 +687,7 @@ class TaskViewModel(
             } else null
 
             val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
-            val daysOfWeekSet = if (!task.recurrenceDaysOfWeek.isNullOrBlank()) {
-                task.recurrenceDaysOfWeek.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
-            } else null
+            val daysOfWeekSet = task.parsedDaysOfWeek()
 
             ParsedTaskSchedule(
                 id = task.id,

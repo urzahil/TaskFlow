@@ -1,6 +1,7 @@
 package com.example.data.model
 
 import java.util.Calendar
+import java.util.Locale
 
 /**
  * A lightweight, self-contained date representation (year, month 1-12, day 1-31)
@@ -14,14 +15,14 @@ data class AppDate(
 
     init {
         require(month in 1..12) { "Month must be between 1 and 12: $month" }
-        require(day in 1..31) { "Day must be between 1 and 31: $day" }
+        require(day in 1..daysInMonth(year, month)) { "Invalid day for $year-$month: $day" }
     }
 
     /**
      * Converts date to ISO string "YYYY-MM-DD"
      */
     fun toIsoString(): String {
-        return "%04d-%02d-%02d".format(year, month, day)
+        return String.format(Locale.ROOT, "%04d-%02d-%02d", year, month, day)
     }
 
     /**

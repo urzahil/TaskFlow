@@ -113,6 +113,7 @@ class TaskRepository(private val taskDao: TaskDao) {
 
         var cleanedCount = 0
         var movedCount = 0
+        var cleanedRecurringOccurrences = 0
 
         val tasksToDelete = mutableListOf<TaskEntity>()
         val tasksToUpdate = mutableListOf<TaskEntity>()
@@ -140,6 +141,25 @@ class TaskRepository(private val taskDao: TaskDao) {
             } catch (_: Exception) {
                 null
             } ?: continue
+
+            // Count only scheduled occurrences removed before today, respecting an optional end date.
+            val end = task.endDate?.takeIf { it.isNotBlank() }?.let {
+                try { AppDate.parseIso(it) } catch (_: IllegalArgumentException) { null }
+            }
+            val lastPastDate = minOf(today.minusDays(1), end ?: today.minusDays(1))
+            if (start <= lastPastDate) {
+                val span = lastPastDate.daysBetween(start) + 1
+                val weekdays = task.parsedDaysOfWeek()
+                val count = if (weekdays.isEmpty()) {
+                    (span - 1) / task.recurrenceDays.coerceAtLeast(1) + 1
+                } else {
+                    (span / 7) * weekdays.size + (0L until span % 7).count {
+                        start.plusDays(it).dayOfWeek() in weekdays
+                    }
+                }
+                cleanedRecurringOccurrences = (cleanedRecurringOccurrences.toLong() + count)
+                    .coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            }
 
             // If the recurring task has an end date that already passed, delete the expired task completely
             if (!task.endDate.isNullOrBlank()) {
@@ -223,7 +243,7 @@ class TaskRepository(private val taskDao: TaskDao) {
         return RolloverResult(
             cleanedCount = cleanedCount,
             movedCount = movedCount,
-            cleanedRecurringOccurrences = 0
+            cleanedRecurringOccurrences = cleanedRecurringOccurrences
         )
     }
 

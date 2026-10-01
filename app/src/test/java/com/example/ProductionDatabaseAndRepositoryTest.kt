@@ -166,6 +166,8 @@ class ProductionDatabaseAndRepositoryTest {
         val updated = repository.allTasks.first().first { it.id == 201L }
         val updatedStart = AppDate.parseIso(updated.startDate)
         assertTrue("Start date should be moved on or after today", updatedStart >= today)
+        assertEquals(3, result.cleanedRecurringOccurrences)
+        assertEquals(0, repository.cleanupAndRolloverTasks(today).cleanedRecurringOccurrences)
     }
 
     @Test
@@ -214,6 +216,7 @@ class ProductionDatabaseAndRepositoryTest {
         val result = repository.cleanupAndRolloverTasks(today)
 
         assertEquals(1, result.cleanedCount)
+        assertEquals("Only September 1, 8 and 15 were scheduled", 3, result.cleanedRecurringOccurrences)
         assertTrue(repository.allTasks.first().none { it.id == 401L })
     }
 

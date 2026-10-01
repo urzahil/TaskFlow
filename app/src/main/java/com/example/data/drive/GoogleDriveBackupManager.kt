@@ -10,6 +10,7 @@ import com.example.data.model.TaskEntity
 import com.example.data.repository.TaskRepository
 import com.example.ui.model.CategoryIcons
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -143,7 +144,21 @@ open class GoogleDriveBackupManager(
      */
     fun parseBackupJson(jsonString: String): ParsedBackup {
         val root = JSONObject(jsonString)
+        require(!root.has("app") || root.getString("app") == "TaskFlow") {
+            "This file is not a TaskFlow backup"
+        }
+        require(!root.has("version") || root.getInt("version") in 1..2) {
+            "Unsupported backup version"
+        }
+        // Validate the complete input before the restore transaction can delete local data.
+        require(root.optJSONArray("tasks") != null) { "Backup must contain a tasks array" }
+        for (key in listOf("completions", "categories")) {
+            require(!root.has(key) || root.optJSONArray(key) != null) {
+                "Backup $key must be an array"
+            }
+        }
         val tasks = mutableListOf<TaskEntity>()
+        val taskIds = mutableSetOf<Long>()
         val completions = mutableListOf<TaskCompletionEntity>()
         val categories = mutableListOf<CategoryEntity>()
 
@@ -175,6 +190,12 @@ open class GoogleDriveBackupManager(
                     endDate = endDate,
                     createdAt = obj.optLong("createdAt", System.currentTimeMillis())
                 )
+                require(task.id > 0 && taskIds.add(task.id)) { "Invalid or duplicate task ID" }
+                require(task.title.isNotBlank()) { "Task title must not be empty" }
+                require(AppDate.parseIso(task.startDate).toIsoString() == task.startDate) { "Invalid task date" }
+                task.endDate?.let {
+                    require(AppDate.parseIso(it).toIsoString() == it && it >= task.startDate) { "Invalid end date" }
+                }
                 tasks.add(task)
             }
         }
@@ -188,6 +209,8 @@ open class GoogleDriveBackupManager(
                     date = obj.getString("date"),
                     completedAt = obj.optLong("completedAt", System.currentTimeMillis())
                 )
+                require(comp.taskId in taskIds) { "Completion refers to an unknown task" }
+                require(AppDate.parseIso(comp.date).toIsoString() == comp.date) { "Invalid completion date" }
                 completions.add(comp)
             }
         }
@@ -292,6 +315,7 @@ open class GoogleDriveBackupManager(
 
             Result.success(RestoreResultData(parsed.tasks.size, parsed.categories.size))
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e(TAG, "Error restoring backup: ${e.message}", e)
             Result.failure(e)
         }
@@ -316,6 +340,7 @@ open class GoogleDriveBackupManager(
                 .apply()
             Result.success(RestoreResultData(parsed.tasks.size, parsed.categories.size))
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e(TAG, "Error restoring from JSON: ${e.message}", e)
             Result.failure(e)
         }
