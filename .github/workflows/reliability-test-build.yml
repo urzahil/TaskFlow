@@ -35,7 +35,19 @@ jobs:
 
       - name: Build release APK
         if: always()
-        run: ./gradlew assembleRelease
+        id: release-build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ./gradlew assembleRelease --stacktrace 2>&1 | tee gradle-release.log
+
+      - name: Upload release build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TaskFlow-release-build-log-${{ github.sha }}
+          path: gradle-release.log
+          if-no-files-found: warn
 
       - name: Upload test log
         if: always()
@@ -52,6 +64,10 @@ jobs:
           name: TaskFlow-reliability-release-${{ github.sha }}
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+
+      - name: Fail if release build failed
+        if: steps.release-build.outcome == 'failure'
+        run: exit 1
 
       - name: Fail if unit tests failed
         if: steps.unit-tests.outcome == 'failure'
