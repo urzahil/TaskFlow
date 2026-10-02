@@ -64,7 +64,7 @@ class TaskRepository(private val taskDao: TaskDao) {
     }
 
     suspend fun deleteCategory(categoryName: String) {
-        taskDao.deleteCategoryAtomically(categoryName)
+        taskDao.deleteCategoryAtomically(categoryName, 0xFF3B82F6)
     }
 
     suspend fun toggleCompletion(taskId: Long, dateIso: String, currentlyCompleted: Boolean) {

@@ -313,6 +313,15 @@ class TaskViewModel(
             }
             refreshDriveState()
 
+            // Resume any backup that was durably marked pending before the process was killed or the last attempt failed.
+            if (driveBackupManager.isBackupPendingDurable() &&
+                driveBackupManager.isAutoBackupEnabled() &&
+                driveBackupManager.getSignedInAccount() != null
+            ) {
+                isAutoBackupPending = true
+                autoBackupChannel.trySend(Unit)
+            }
+
             // Run startup check unconditionally to clean old completed tasks and roll forward tasks to today
             val today = AppDate.today()
             _currentToday.value = today
@@ -361,6 +370,15 @@ class TaskViewModel(
         if (_selectedDate.value == previousToday && previousToday != now) {
             _selectedDate.value = now
             _selectedYearMonth.value = Pair(now.year, now.month)
+        }
+
+        // Retry any durable backup that is still pending when the app returns to the foreground.
+        if (driveBackupManager.isBackupPendingDurable() &&
+            driveBackupManager.isAutoBackupEnabled() &&
+            driveBackupManager.getSignedInAccount() != null
+        ) {
+            isAutoBackupPending = true
+            autoBackupChannel.trySend(Unit)
         }
 
         // Always execute cleanup and rollover on foreground transition and date changes
@@ -911,6 +929,7 @@ class TaskViewModel(
         if (driveBackupManager.getSignedInAccount() == null) return
 
         isAutoBackupPending = true
+        driveBackupManager.setBackupPendingDurable(true)
         debounceJob?.cancel()
         debounceJob = viewModelScope.launch {
             if (debounceMs > 0) {
@@ -933,6 +952,9 @@ class TaskViewModel(
             while (isAutoBackupPending) {
                 isAutoBackupPending = false
                 if (!driveBackupManager.isAutoBackupEnabled() || driveBackupManager.getSignedInAccount() == null) {
+                    if (!driveBackupManager.isAutoBackupEnabled()) {
+                        driveBackupManager.setBackupPendingDurable(false)
+                    }
                     break
                 }
                 try {
@@ -941,10 +963,14 @@ class TaskViewModel(
                     val categories = repository.allCategories.first()
                     val result = driveBackupManager.backupToDrive(tasks, completions, categories)
                     if (result.isSuccess) {
+                        driveBackupManager.setBackupPendingDurable(false)
                         refreshDriveState()
                     } else {
+                        isAutoBackupPending = true
+                        driveBackupManager.setBackupPendingDurable(true)
                         val err = result.exceptionOrNull()?.message ?: "Auto-backup failed"
                         refreshDriveState(message = "Auto-backup error: $err", isError = true)
+                        break
                     }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
@@ -1012,6 +1038,8 @@ class TaskViewModel(
                     val err = result.exceptionOrNull()?.message ?: "Restore failed"
                     refreshDriveState(message = "Restore error: $err", isError = true)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 refreshDriveState(message = "Restore failed: ${e.message}", isError = true)
             }
@@ -1076,6 +1104,8 @@ class TaskViewModel(
                     val err = result.exceptionOrNull()?.message ?: "Invalid backup file"
                     refreshDriveState(message = "Restore error: $err", isError = true)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 refreshDriveState(message = "Restore failed: ${e.message}", isError = true)
             }

@@ -92,13 +92,13 @@ interface TaskDao {
     }
 
     @Transaction
-    suspend fun deleteCategoryAtomically(categoryName: String) {
-        reassignCategoryTasks(categoryName)
+    suspend fun deleteCategoryAtomically(categoryName: String, newColor: Long) {
+        reassignCategoryTasks(categoryName, newColor)
         deleteCategoryByName(categoryName)
     }
 
-    @Query("UPDATE tasks SET category = 'General', colorHex = 4282098422 WHERE category = :categoryName")
-    suspend fun reassignCategoryTasks(categoryName: String)
+    @Query("UPDATE tasks SET category = 'General', colorHex = :newColor WHERE category = :categoryName")
+    suspend fun reassignCategoryTasks(categoryName: String, newColor: Long)
 
     @Query("UPDATE tasks SET category = :newCategory, colorHex = :newColor WHERE category = :oldCategory")
     suspend fun updateTasksCategory(oldCategory: String, newCategory: String, newColor: Long)

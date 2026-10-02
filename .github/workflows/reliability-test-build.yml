@@ -1,0 +1,74 @@
+name: Reliability Test & Release APK
+
+on:
+  push:
+    branches:
+      - fix/reliability-hardening
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  verify-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Make Gradle executable
+        run: chmod +x ./gradlew
+
+      - name: Run unit tests
+        id: unit-tests
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ./gradlew testDebugUnitTest --tests com.example.ProductionDatabaseAndRepositoryTest --stacktrace 2>&1 | tee gradle-test.log
+
+      - name: Build release APK
+        if: always()
+        id: release-build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ./gradlew assembleRelease --stacktrace 2>&1 | tee gradle-release.log
+
+      - name: Upload release build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TaskFlow-release-build-log-${{ github.sha }}
+          path: gradle-release.log
+          if-no-files-found: warn
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TaskFlow-test-log-${{ github.sha }}
+          path: gradle-test.log
+          if-no-files-found: warn
+
+      - name: Upload release APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TaskFlow-reliability-release-${{ github.sha }}
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+
+      - name: Fail if release build failed
+        if: steps.release-build.outcome == 'failure'
+        run: exit 1
+
+      - name: Fail if unit tests failed
+        if: steps.unit-tests.outcome == 'failure'
+        run: exit 1
