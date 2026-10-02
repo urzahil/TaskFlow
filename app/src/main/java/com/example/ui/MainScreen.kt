@@ -143,8 +143,8 @@ fun MainScreen(
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
                 try {
-                    val json = context.contentResolver.openInputStream(uri)?.use { isStream ->
-                        isStream.bufferedReader().use { it.readText() }
+                    val json = context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        BackupFileReader.readJson(inputStream)
                     }
                     if (json != null) {
                         viewModel.restoreFromJson(json)
