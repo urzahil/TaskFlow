@@ -166,9 +166,11 @@ fun TaskAddEditSheet(
     }
     var selectedDaysOfWeek by remember {
         mutableStateOf(
-            if (!existingTask?.recurrenceDaysOfWeek.isNullOrBlank()) {
-                existingTask!!.recurrenceDaysOfWeek!!.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
-            } else {
+            existingTask?.recurrenceDaysOfWeek
+                ?.takeIf { it.isNotBlank() }
+                ?.split(",")
+                ?.mapNotNull { it.trim().toIntOrNull() }
+                ?.toSet() else {
                 setOf(
                     existingTask?.let {
                         try { AppDate.parseIso(it.startDate).dayOfWeek() } catch (_: Exception) { initialDate.dayOfWeek() }
