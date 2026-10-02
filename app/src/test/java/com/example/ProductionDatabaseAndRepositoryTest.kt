@@ -302,6 +302,34 @@ class ProductionDatabaseAndRepositoryTest {
     }
 
     @Test
+    fun testDeletingCategoryReassignsTasksToGeneralColor() = runBlocking {
+        repository.insertCategory(
+            CategoryEntity(
+                name = "Temporary",
+                colorHex = 0xFFEF4444,
+                iconName = "work",
+                isDefault = false
+            )
+        )
+        repository.insertTask(
+            TaskEntity(
+                id = 605,
+                title = "Reassigned task",
+                category = "Temporary",
+                colorHex = 0xFFEF4444,
+                startDate = "2026-09-25"
+            )
+        )
+
+        repository.deleteCategory("Temporary")
+
+        val task = repository.allTasks.first().first { it.id == 605L }
+        assertEquals("General", task.category)
+        assertEquals(0xFF3B82F6, task.colorHex)
+        assertTrue(repository.allCategories.first().none { it.name == "Temporary" })
+    }
+
+    @Test
     fun testRepositoryIsTaskScheduledOnDateProduction() {
         val mwfTask = TaskEntity(
             id = 501,
