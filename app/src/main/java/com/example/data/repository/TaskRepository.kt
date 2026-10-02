@@ -88,7 +88,7 @@ class TaskRepository(private val taskDao: TaskDao) {
     suspend fun cleanupAndRolloverTasks(today: AppDate = AppDate.today()): RolloverResult {
         val todayIso = today.toIsoString()
         val pastTasks = taskDao.getPastNonRecurringTasks(todayIso)
-        val allCompletedTaskIds = taskDao.getAllCompletedTaskIds().toSet()
+        val allCompletedTaskIds = taskDao.getPastCompletedTaskIds(todayIso).toSet()
         val allCompletions = taskDao.getAllCompletionsList()
         val completionKeys = allCompletions.map { "${it.taskId}_${it.date}" }.toSet()
 
