@@ -920,6 +920,7 @@ class TaskViewModel(
         if (driveBackupManager.getSignedInAccount() == null) return
 
         isAutoBackupPending = true
+        driveBackupManager.setBackupPendingDurable(true)
         debounceJob?.cancel()
         debounceJob = viewModelScope.launch {
             if (debounceMs > 0) {
@@ -942,6 +943,9 @@ class TaskViewModel(
             while (isAutoBackupPending) {
                 isAutoBackupPending = false
                 if (!driveBackupManager.isAutoBackupEnabled() || driveBackupManager.getSignedInAccount() == null) {
+                    if (!driveBackupManager.isAutoBackupEnabled()) {
+                        driveBackupManager.setBackupPendingDurable(false)
+                    }
                     break
                 }
                 try {
@@ -950,8 +954,11 @@ class TaskViewModel(
                     val categories = repository.allCategories.first()
                     val result = driveBackupManager.backupToDrive(tasks, completions, categories)
                     if (result.isSuccess) {
+                        driveBackupManager.setBackupPendingDurable(false)
                         refreshDriveState()
                     } else {
+                        isAutoBackupPending = true
+                        driveBackupManager.setBackupPendingDurable(true)
                         val err = result.exceptionOrNull()?.message ?: "Auto-backup failed"
                         refreshDriveState(message = "Auto-backup error: $err", isError = true)
                     }
@@ -1021,6 +1028,8 @@ class TaskViewModel(
                     val err = result.exceptionOrNull()?.message ?: "Restore failed"
                     refreshDriveState(message = "Restore error: $err", isError = true)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 refreshDriveState(message = "Restore failed: ${e.message}", isError = true)
             }
@@ -1085,6 +1094,8 @@ class TaskViewModel(
                     val err = result.exceptionOrNull()?.message ?: "Invalid backup file"
                     refreshDriveState(message = "Restore error: $err", isError = true)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 refreshDriveState(message = "Restore failed: ${e.message}", isError = true)
             }
