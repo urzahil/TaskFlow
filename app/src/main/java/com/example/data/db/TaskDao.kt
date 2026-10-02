@@ -116,8 +116,6 @@ interface TaskDao {
     @Query("SELECT DISTINCT taskId FROM task_completions WHERE date < :todayIso")
     suspend fun getPastCompletedTaskIds(todayIso: String): List<Long>
 
-    @Query("SELECT DISTINCT taskId FROM task_completions")
-    suspend fun getAllCompletedTaskIds(): List<Long>
 
     @Query("SELECT * FROM task_completions")
     suspend fun getAllCompletionsList(): List<TaskCompletionEntity>
