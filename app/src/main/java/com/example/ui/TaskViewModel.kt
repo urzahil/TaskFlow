@@ -313,6 +313,15 @@ class TaskViewModel(
             }
             refreshDriveState()
 
+            // Resume any backup that was durably marked pending before the process was killed or the last attempt failed.
+            if (driveBackupManager.isBackupPendingDurable() &&
+                driveBackupManager.isAutoBackupEnabled() &&
+                driveBackupManager.getSignedInAccount() != null
+            ) {
+                isAutoBackupPending = true
+                autoBackupChannel.trySend(Unit)
+            }
+
             // Run startup check unconditionally to clean old completed tasks and roll forward tasks to today
             val today = AppDate.today()
             _currentToday.value = today
