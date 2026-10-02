@@ -221,6 +221,87 @@ class ProductionDatabaseAndRepositoryTest {
     }
 
     @Test
+    fun testFutureNonRecurringTaskSurvivesRollover() = runBlocking {
+        val futureTask = TaskEntity(
+            id = 601,
+            title = "Future task",
+            isRecurring = false,
+            startDate = "2026-09-28"
+        )
+        repository.insertTask(futureTask)
+
+        repository.cleanupAndRolloverTasks(AppDate(2026, 9, 25))
+
+        val remaining = repository.allTasks.first().firstOrNull { it.id == 601L }
+        assertNotNull(remaining)
+        assertEquals("2026-09-28", remaining!!.startDate)
+    }
+
+    @Test
+    fun testFutureRecurringTaskSurvivesRolloverUnchanged() = runBlocking {
+        val futureTask = TaskEntity(
+            id = 602,
+            title = "Future recurring task",
+            isRecurring = true,
+            recurrenceDays = 7,
+            startDate = "2026-09-28",
+            endDate = "2026-10-30"
+        )
+        repository.insertTask(futureTask)
+
+        repository.cleanupAndRolloverTasks(AppDate(2026, 9, 25))
+
+        val remaining = repository.allTasks.first().firstOrNull { it.id == 602L }
+        assertNotNull(remaining)
+        assertEquals("2026-09-28", remaining!!.startDate)
+        assertEquals("2026-10-30", remaining.endDate)
+    }
+
+    @Test
+    fun testFutureCompletionDoesNotMakePastTaskLookCompleted() = runBlocking {
+        val pastTask = TaskEntity(
+            id = 603,
+            title = "Past task with future completion",
+            isRecurring = false,
+            startDate = "2026-09-24"
+        )
+        repository.insertTask(pastTask)
+        repository.insertCompletions(
+            listOf(TaskCompletionEntity(taskId = 603, date = "2026-09-28"))
+        )
+
+        repository.cleanupAndRolloverTasks(AppDate(2026, 9, 25))
+
+        val remaining = repository.allTasks.first().firstOrNull { it.id == 603L }
+        assertNotNull(remaining)
+        assertEquals("2026-09-25", remaining!!.startDate)
+
+        val completions = repository.allCompletions.first()
+        assertTrue(completions.any { it.taskId == 603L && it.date == "2026-09-28" })
+    }
+
+    @Test
+    fun testFutureCompletionIsNotDeletedByRolloverCleanup() = runBlocking {
+        val futureTask = TaskEntity(
+            id = 604,
+            title = "Future task with future completion",
+            isRecurring = false,
+            startDate = "2026-09-28"
+        )
+        repository.insertTask(futureTask)
+        repository.insertCompletions(
+            listOf(TaskCompletionEntity(taskId = 604, date = "2026-09-30"))
+        )
+
+        repository.cleanupAndRolloverTasks(AppDate(2026, 9, 25))
+
+        val remaining = repository.allTasks.first().firstOrNull { it.id == 604L }
+        assertNotNull(remaining)
+        val completions = repository.allCompletions.first()
+        assertTrue(completions.any { it.taskId == 604L && it.date == "2026-09-30" })
+    }
+
+    @Test
     fun testRepositoryIsTaskScheduledOnDateProduction() {
         val mwfTask = TaskEntity(
             id = 501,
