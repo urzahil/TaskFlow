@@ -400,7 +400,7 @@ class TaskViewModel(
         viewModelScope.launch {
             rolloverMutex.withLock {
                 val result = repository.cleanupAndRolloverTasks(targetDate)
-            val nowTimeFormatted = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
+            val nowTimeFormatted = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
             userPrefs?.edit()
                 ?.putString(KEY_LAST_ROLLOVER_DATE, targetDate.toIsoString())
                 ?.putString(KEY_LAST_ROLLOVER_TIMESTAMP, nowTimeFormatted)
