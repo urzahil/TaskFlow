@@ -372,6 +372,15 @@ class TaskViewModel(
             _selectedYearMonth.value = Pair(now.year, now.month)
         }
 
+        // Retry any durable backup that is still pending when the app returns to the foreground.
+        if (driveBackupManager.isBackupPendingDurable() &&
+            driveBackupManager.isAutoBackupEnabled() &&
+            driveBackupManager.getSignedInAccount() != null
+        ) {
+            isAutoBackupPending = true
+            autoBackupChannel.trySend(Unit)
+        }
+
         // Always execute cleanup and rollover on foreground transition and date changes
         runCleanupAndRollover(targetDate = now, isForegroundCheck = true)
     }
@@ -961,6 +970,7 @@ class TaskViewModel(
                         driveBackupManager.setBackupPendingDurable(true)
                         val err = result.exceptionOrNull()?.message ?: "Auto-backup failed"
                         refreshDriveState(message = "Auto-backup error: $err", isError = true)
+                        break
                     }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
