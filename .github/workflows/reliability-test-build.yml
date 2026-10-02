@@ -27,14 +27,32 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest
+        id: unit-tests
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ./gradlew testDebugUnitTest --stacktrace 2>&1 | tee gradle-test.log
 
       - name: Build release APK
+        if: always()
         run: ./gradlew assembleRelease
 
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TaskFlow-test-log-${{ github.sha }}
+          path: gradle-test.log
+          if-no-files-found: warn
+
       - name: Upload release APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: TaskFlow-reliability-release-${{ github.sha }}
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+
+      - name: Fail if unit tests failed
+        if: steps.unit-tests.outcome == 'failure'
+        run: exit 1
