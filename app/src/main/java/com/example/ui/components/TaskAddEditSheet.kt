@@ -170,7 +170,8 @@ fun TaskAddEditSheet(
                 ?.takeIf { it.isNotBlank() }
                 ?.split(",")
                 ?.mapNotNull { it.trim().toIntOrNull() }
-                ?.toSet() else {
+                ?.toSet()
+                ?: emptySet() else {
                 setOf(
                     existingTask?.let {
                         try { AppDate.parseIso(it.startDate).dayOfWeek() } catch (_: Exception) { initialDate.dayOfWeek() }
