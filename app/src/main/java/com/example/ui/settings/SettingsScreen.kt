@@ -1687,7 +1687,7 @@ private fun CategoryFormDialog(
                         if (isDefaultCategory) {
                             Text("Default category name is fixed", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         } else if (errorMessage != null) {
-                            Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
+                            Text(errorMessage.orEmpty(), color = MaterialTheme.colorScheme.error)
                         }
                     },
                     keyboardOptions = KeyboardOptions(
