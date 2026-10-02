@@ -31,7 +31,7 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          ./gradlew testDebugUnitTest --tests com.example.ProductionDatabaseAndRepositoryTest --stacktrace 2>&1 | tee gradle-test.log
+          ./gradlew testDebugUnitTest --tests com.example.ProductionDatabaseAndRepositoryTest --tests com.example.BackupFileReaderTest --stacktrace 2>&1 | tee gradle-test.log
 
       - name: Build release APK
         if: always()
