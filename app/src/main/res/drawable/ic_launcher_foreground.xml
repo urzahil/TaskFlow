@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outer Circular Accent Ring (Safe Zone <= 66dp centered at 54,54) -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M54,21.5 A32.5,32.5 0 1 0 54,86.5 A32.5,32.5 0 1 0 54,21.5 Z"
+        android:strokeWidth="1.5"
+        android:strokeColor="#4ADE80" />
+
+    <!-- Circular Emblem Base Disc -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M54,23 A31,31 0 1 0 54,85 A31,31 0 1 0 54,23 Z" />
+
+    <!-- Calendar Card Base -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,36 h36 c2.5,0 4.5,2 4.5,4.5 v30 c0,2.5 -2,4.5 -4.5,4.5 h-36 c-2.5,0 -4.5,-2 -4.5,-4.5 v-30 c0,-2.5 2,-4.5 4.5,-4.5 z" />
+
+    <!-- Calendar Top Header Strip -->
+    <path
+        android:fillColor="#16A34A"
+        android:pathData="M36,36 h36 c2.5,0 4.5,2 4.5,4.5 v7.5 h-45 v-7.5 c0,-2.5 2,-4.5 4.5,-4.5 z" />
+
+    <!-- Calendar Spiral Rings -->
+    <path
+        android:fillColor="#86EFAC"
+        android:pathData="M43,32.5 c1.1,0 2,0.9 2,2 v4 c0,1.1 -0.9,2 -2,2 s-2,-0.9 -2,-2 v-4 c0,-1.1 0.9,-2 2,-2 z" />
+    <path
+        android:fillColor="#86EFAC"
+        android:pathData="M65,32.5 c1.1,0 2,0.9 2,2 v4 c0,1.1 -0.9,2 -2,2 s-2,-0.9 -2,-2 v-4 c0,-1.1 0.9,-2 2,-2 z" />
+
+    <!-- Task Row 1: Green bullet + task bar -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M41,49.5 A2.5,2.5 0 1 0 41,54.5 A2.5,2.5 0 1 0 41,49.5 Z" />
+    <path
+        android:fillColor="#94A3B8"
+        android:pathData="M47,51.2 h21 c0.8,0 1.5,0.7 1.5,1.5 s-0.7,1.5 -1.5,1.5 h-21 c-0.8,0 -1.5,-0.7 -1.5,-1.5 s0.7,-1.5 1.5,-1.5 z" />
+
+    <!-- Task Row 2: Blue bullet + task bar -->
+    <path
+        android:fillColor="#3B82F6"
+        android:pathData="M41,57.5 A2.5,2.5 0 1 0 41,62.5 A2.5,2.5 0 1 0 41,57.5 Z" />
+    <path
+        android:fillColor="#CBD5E1"
+        android:pathData="M47,59.2 h16 c0.8,0 1.5,0.7 1.5,1.5 s-0.7,1.5 -1.5,1.5 h-16 c-0.8,0 -1.5,-0.7 -1.5,-1.5 s0.7,-1.5 1.5,-1.5 z" />
+
+    <!-- Task Row 3: Amber bullet + task bar -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M41,65.5 A2.5,2.5 0 1 0 41,70.5 A2.5,2.5 0 1 0 41,65.5 Z" />
+    <path
+        android:fillColor="#E2E8F0"
+        android:pathData="M47,67.2 h12 c0.8,0 1.5,0.7 1.5,1.5 s-0.7,1.5 -1.5,1.5 h-12 c-0.8,0 -1.5,-0.7 -1.5,-1.5 s0.7,-1.5 1.5,-1.5 z" />
+
+    <!-- Circular Completion Badge (Glowing Emerald) -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M68,56.5 A11.5,11.5 0 1 0 68,79.5 A11.5,11.5 0 1 0 68,56.5 Z"
+        android:strokeWidth="2"
+        android:strokeColor="#FFFFFF" />
+
+    <!-- Crisp White Checkmark in Badge -->
+    <path
+        android:pathData="M63.5,68.5 l3,3.2 l7.5,-7.5"
+        android:strokeWidth="2.4"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
