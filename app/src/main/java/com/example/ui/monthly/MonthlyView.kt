@@ -327,15 +327,15 @@ fun MonthlyTaskRow(
         modifier = modifier
             .fillMaxWidth()
             .testTag("monthly_task_item_${taskItem.task.id}"),
-        shape = RoundedCornerShape(6.dp),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
             containerColor = if (taskItem.isCompleted) {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                MaterialTheme.colorScheme.surfaceContainerLowest
             } else {
-                MaterialTheme.colorScheme.surface
+                MaterialTheme.colorScheme.surfaceContainerLow
             }
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (taskItem.isCompleted) 0.dp else 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
