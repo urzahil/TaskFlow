@@ -176,15 +176,26 @@ interface TaskDao {
         taskIdsForCompletionDeletion: List<Long>,
         todayIso: String
     ) {
-        if (taskIdsForCompletionDeletion.isNotEmpty()) {
-            deleteCompletionsForTaskIds(taskIdsForCompletionDeletion)
-            deleteOccurrenceExclusionsForTaskIds(taskIdsForCompletionDeletion)
+        // Re-check completed one-off tasks inside the same transaction that applies the
+        // cleanup. A completion may have been committed after the scheduler's initial read;
+        // without this check, a stale rollover candidate could move that finished task.
+        val completedNonRecurringTasks = getCompletedNonRecurringTasks()
+        val effectiveTasksToDelete =
+            (tasksToDelete + completedNonRecurringTasks).distinctBy { it.id }
+        val effectiveTaskIdsForCompletionDeletion =
+            (taskIdsForCompletionDeletion + completedNonRecurringTasks.map { it.id }).distinct()
+        val deletedTaskIds = effectiveTasksToDelete.map { it.id }.toSet()
+
+        if (effectiveTaskIdsForCompletionDeletion.isNotEmpty()) {
+            deleteCompletionsForTaskIds(effectiveTaskIdsForCompletionDeletion)
+            deleteOccurrenceExclusionsForTaskIds(effectiveTaskIdsForCompletionDeletion)
         }
-        if (tasksToDelete.isNotEmpty()) {
-            deleteTasks(tasksToDelete)
+        if (effectiveTasksToDelete.isNotEmpty()) {
+            deleteTasks(effectiveTasksToDelete)
         }
-        if (tasksToUpdate.isNotEmpty()) {
-            for (task in tasksToUpdate) {
+        // Never apply a stale date update to a task deleted by the final completion check.
+        for (task in tasksToUpdate) {
+            if (task.id !in deletedTaskIds) {
                 updateTaskStartDate(task.id, task.startDate)
             }
         }
