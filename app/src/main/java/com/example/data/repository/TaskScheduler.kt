@@ -165,39 +165,6 @@ object TaskScheduler {
         )
     }
 
-    fun isTaskScheduledOnDate(task: TaskEntity, targetDate: AppDate): Boolean {
-        val start = try {
-            AppDate.parseIso(task.startDate)
-        } catch (_: Exception) {
-            return false
-        }
-
-        if (!task.isRecurring) {
-            return task.startDate == targetDate.toIsoString()
-        }
-
-        if (targetDate < start) {
-            return false
-        }
-
-        if (!task.endDate.isNullOrBlank()) {
-            val end = try {
-                AppDate.parseIso(task.endDate)
-            } catch (_: Exception) {
-                null
-            }
-            if (end != null && targetDate > end) {
-                return false
-            }
-        }
-
-        val validDaysOfWeek = task.parsedDaysOfWeek()
-        if (validDaysOfWeek.isNotEmpty()) {
-            return targetDate.dayOfWeek() in validDaysOfWeek
-        }
-
-        val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
-        val diffDays = targetDate.daysBetween(start)
-        return (diffDays % interval) == 0L
-    }
+    fun isTaskScheduledOnDate(task: TaskEntity, targetDate: AppDate): Boolean =
+        TaskSchedule.from(task)?.isScheduledOn(targetDate) ?: false
 }

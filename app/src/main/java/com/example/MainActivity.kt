@@ -4,7 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.Build
+import android.util.Log
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -24,6 +24,10 @@ import com.example.ui.TaskViewModel
 import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
+
+    private companion object {
+        const val TAG = "MainActivity"
+    }
 
     private val viewModel: TaskViewModel by viewModels {
         val database = AppDatabase.getInstance(applicationContext)
@@ -67,17 +71,16 @@ class MainActivity : ComponentActivity() {
                 addAction(Intent.ACTION_TIMEZONE_CHANGED)
             }
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    ContextCompat.registerReceiver(
-                        this,
-                        dateChangeReceiver,
-                        filter,
-                        ContextCompat.RECEIVER_EXPORTED
-                    )
-                } else {
-                    registerReceiver(dateChangeReceiver, filter)
-                }
-            } catch (_: Exception) {
+                // System date/time broadcasts are delivered to non-exported receivers too.
+                ContextCompat.registerReceiver(
+                    this,
+                    dateChangeReceiver,
+                    filter,
+                    ContextCompat.RECEIVER_NOT_EXPORTED
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not register date-change receiver", e)
+                dateChangeReceiver = null
             }
         }
     }
@@ -87,7 +90,8 @@ class MainActivity : ComponentActivity() {
         dateChangeReceiver?.let {
             try {
                 unregisterReceiver(it)
-            } catch (_: Exception) {
+            } catch (e: IllegalArgumentException) {
+                Log.w(TAG, "Receiver was not registered", e)
             }
             dateChangeReceiver = null
         }

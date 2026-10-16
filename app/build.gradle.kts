@@ -1,12 +1,9 @@
-import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.devtools.ksp)
     alias(libs.plugins.roborazzi)
     alias(libs.plugins.secrets)
-    alias(libs.plugins.google.services)
 }
 
 android {
@@ -45,13 +42,13 @@ android {
     buildTypes {
         release {
             isCrunchPngs = false
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig =
-                signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            // Never fall back to the debug key: without a release keystore the APK stays unsigned.
+            signingConfig = signingConfigs.findByName("release")
         }
         debug { signingConfig = signingConfigs.getByName("debug") }
     }
@@ -78,13 +75,10 @@ secrets {
     ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
 }
 
-googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
-
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
-    implementation(platform(libs.firebase.bom))
     // implementation(libs.accompanist.permissions)
     implementation(libs.androidx.activity.compose)
     // implementation(libs.androidx.camera.camera2)
@@ -106,8 +100,6 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.room.runtime)
     // implementation(libs.coil.compose)
-    implementation(libs.converter.moshi)
-    implementation(libs.firebase.ai)
     // Uncomment to use Firestore:
     // implementation(libs.firebase.firestore)
 
@@ -117,16 +109,11 @@ dependencies {
     // implementation(libs.androidx.credentials)
     // implementation(libs.androidx.credentials.play.services)
     // implementation(libs.googleid)
-    implementation(libs.firebase.appcheck.recaptcha)
-    implementation(libs.firebase.appcheck.debug)
     implementation(libs.play.services.auth)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.logging.interceptor)
-    implementation(libs.moshi.kotlin)
     implementation(libs.okhttp)
     // implementation(libs.play.services.location)
-    implementation(libs.retrofit)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.androidx.core)
     testImplementation(libs.androidx.junit)
@@ -144,5 +131,9 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
     "ksp"(libs.androidx.room.compiler)
-    "ksp"(libs.moshi.kotlin.codegen)
+}
+
+ksp {
+    // Export Room schemas so migrations can be reviewed and tested.
+    arg("room.schemaLocation", "$projectDir/schemas")
 }

@@ -98,11 +98,30 @@ class TaskCleanupAndRolloverTest {
     }
 
     @Test
-    fun testEuropeanDateFormat() {
+    fun testLocalizedDateFormatUk() {
         val date = AppDate(2026, 9, 23)
-        assertEquals("23 September 2026", date.formatEuropean(includeYear = true))
-        assertEquals("23 September", date.formatEuropean(includeYear = false))
-        assertEquals("23 Sep 2026", date.formatEuropeanShort(includeYear = true))
-        assertEquals("23 Sep", date.formatEuropeanShort(includeYear = false))
+        val uk = java.util.Locale.UK
+        assertEquals("23 September 2026", date.formatEuropean(includeYear = true, locale = uk))
+        assertEquals("23 September", date.formatEuropean(includeYear = false, locale = uk))
+        // CLDR abbreviates September as "Sept" in en-GB on newer JDKs, so only check the shape.
+        assertTrue(date.formatEuropeanShort(includeYear = true, locale = uk).matches(Regex("23 Sept? 2026")))
+        assertTrue(date.formatEuropeanShort(includeYear = false, locale = uk).matches(Regex("23 Sept?")))
+    }
+
+    @Test
+    fun testLocalizedDateFormatUsPutsMonthFirst() {
+        val date = AppDate(2026, 9, 23)
+        val us = java.util.Locale.US
+        assertEquals("September 23, 2026", date.formatEuropean(includeYear = true, locale = us))
+        assertEquals("September 23", date.formatEuropean(includeYear = false, locale = us))
+        assertEquals("Sep 23, 2026", date.formatEuropeanShort(includeYear = true, locale = us))
+    }
+
+    @Test
+    fun testLocalizedNamesFollowLocale() {
+        assertEquals("Wednesday", AppDate.dayOfWeekName(3, java.util.Locale.ENGLISH))
+        assertEquals("Mittwoch", AppDate.dayOfWeekName(3, java.util.Locale.GERMAN))
+        assertEquals("September", AppDate.monthName(9, java.util.Locale.ENGLISH))
+        assertEquals("", AppDate.monthName(13))
     }
 }
