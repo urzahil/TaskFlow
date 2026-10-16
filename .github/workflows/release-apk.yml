@@ -1,9 +1,6 @@
 name: Build TaskFlow Release APK
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -47,7 +44,7 @@ jobs:
           test -n "$KEY_PASSWORD" || { echo "KEY_PASSWORD secret is not configured"; exit 1; }
           gradle clean assembleRelease --no-daemon
 
-      - name: Prepare consistently named APK
+      - name: Prepare release APK
         run: |
           set -eu
           mkdir -p dist
