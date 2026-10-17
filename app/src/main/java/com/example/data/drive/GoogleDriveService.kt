@@ -234,7 +234,8 @@ class GoogleDriveService(private val context: Context) {
                 if (!response.isSuccessful) {
                     return@withContext Result.failure(Exception("Failed downloading backup: ${response.code}"))
                 }
-                val content = response.body?.string()
+                // Bounded read: a corrupt or hostile Drive file must not exhaust memory.
+                val content = response.body?.byteStream()?.let { BackupFileReader.readJson(it) }
                     ?: return@withContext Result.failure(Exception("Empty backup content"))
                 Result.success(content)
             }

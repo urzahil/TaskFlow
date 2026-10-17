@@ -115,6 +115,11 @@ class RecurringOccurrenceExclusionTest {
     fun migration4To5CreatesOccurrenceExclusionTable() {
         val db = database.openHelper.writableDatabase
         AppDatabase.MIGRATION_4_5.migrate(db)
+        db.execSQL(
+            "INSERT INTO tasks (id, title, description, category, priority, colorHex, isRecurring, " +
+                "recurrenceDays, startDate, createdAt) " +
+                "VALUES (902, 'Recurring', '', 'General', 'Medium', 1, 1, 1, '2026-10-01', 1)"
+        )
 
         db.execSQL(
             "INSERT INTO task_occurrence_exclusions (taskId, date) VALUES (902, '2026-10-20')"

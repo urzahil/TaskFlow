@@ -132,6 +132,7 @@ fun SettingsScreen(
     var categoryToEdit by remember { mutableStateOf<CategoryEntity?>(null) }
     var categoryToDelete by remember { mutableStateOf<CategoryEntity?>(null) }
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
+    var showImportConfirmDialog by remember { mutableStateOf(false) }
 
     val density = LocalDensity.current
     val edgeThresholdPx = with(density) { 60.dp.toPx() }
@@ -1313,7 +1314,7 @@ fun SettingsScreen(
                             }
 
                             OutlinedButton(
-                                onClick = onImportJsonBackup,
+                                onClick = { showImportConfirmDialog = true },
                                 modifier = Modifier
                                     .weight(1f)
                                     .testTag("import_json_backup_button"),
@@ -1607,6 +1608,45 @@ fun SettingsScreen(
                 TextButton(
                     onClick = { categoryToDelete = null },
                     modifier = Modifier.testTag("cancel_delete_category_button")
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Local JSON import confirmation: importing replaces everything on this device.
+    if (showImportConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showImportConfirmDialog = false },
+            icon = {
+                Icon(
+                    Icons.Default.CloudDownload,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = { Text("Import backup file?") },
+            text = {
+                Text(
+                    "Importing replaces all tasks, categories, and completion history on this device with the contents of the file you pick. Consider exporting a backup first."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showImportConfirmDialog = false
+                        onImportJsonBackup()
+                    },
+                    modifier = Modifier.testTag("confirm_import_button")
+                ) {
+                    Text("Choose file")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showImportConfirmDialog = false },
+                    modifier = Modifier.testTag("cancel_import_button")
                 ) {
                     Text("Cancel")
                 }

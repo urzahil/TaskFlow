@@ -1,21 +1,14 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto Backup rules (API < 31). The database runs with TRUNCATE journaling, so the
+  main file is self-contained; -wal/-shm files are deliberately not backed up. Drive
+  sync state is device specific and is not restored.
 -->
 <full-backup-content>
     <include
         domain="database"
         path="taskflow_database" />
     <include
-        domain="database"
-        path="taskflow_database-wal" />
-    <include
-        domain="database"
-        path="taskflow_database-shm" />
-    <include
         domain="sharedpref"
-        path="." />
+        path="taskflow_user_prefs.xml" />
 </full-backup-content>

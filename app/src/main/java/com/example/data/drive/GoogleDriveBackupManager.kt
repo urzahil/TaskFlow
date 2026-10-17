@@ -16,7 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.text.SimpleDateFormat
+import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
 
@@ -48,6 +48,7 @@ open class GoogleDriveBackupManager(
         private const val KEY_AUTO_BACKUP = "auto_backup_enabled"
         private const val KEY_HAS_CHECKED_INSTALL_RESTORE = "has_checked_install_restore"
         private const val KEY_PENDING_BACKUP = "durable_pending_backup"
+        private const val KEY_SYNC_CONFLICT = "sync_conflict_pending"
     }
 
     open fun getGoogleSignInClient() = driveService.getGoogleSignInClient()
@@ -66,6 +67,24 @@ open class GoogleDriveBackupManager(
         prefs.edit().putBoolean(KEY_PENDING_BACKUP, pending).apply()
     }
 
+    /**
+     * True after signing in on a device that already has local tasks while a Drive backup
+     * exists. Auto-backup stays paused until the user picks which side wins, so a small local
+     * data set never silently replaces a larger Drive backup.
+     */
+    open fun isSyncConflictPending(): Boolean = prefs.getBoolean(KEY_SYNC_CONFLICT, false)
+
+    open fun setSyncConflictPending(pending: Boolean) {
+        prefs.edit().putBoolean(KEY_SYNC_CONFLICT, pending).apply()
+    }
+
+    /** Flags a conflict when both this device and Drive hold data. Returns true if flagged. */
+    open suspend fun detectSyncConflict(): Boolean = withContext(Dispatchers.IO) {
+        val conflict = repository.getTaskCount() > 0 && driveService.findBackupFile() != null
+        if (conflict) setSyncConflictPending(true)
+        conflict
+    }
+
     open fun getLastBackupTime(): Long = prefs.getLong(KEY_LAST_BACKUP_TIME, 0L)
 
     open fun getLastBackupCount(): Int = prefs.getInt(KEY_LAST_BACKUP_COUNT, 0)
@@ -75,12 +94,9 @@ open class GoogleDriveBackupManager(
     fun getLastBackupTimeFormatted(): String? {
         val time = getLastBackupTime()
         if (time == 0L) return null
-        val date = Date(time)
-        val day = SimpleDateFormat("d", Locale.getDefault()).format(date)
-        val month = SimpleDateFormat("MMMM", Locale.getDefault()).format(date)
-        val year = SimpleDateFormat("yyyy", Locale.getDefault()).format(date)
-        val timeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
-        return "$day $month $year at $timeStr"
+        // Locale-aware date and time (e.g. "October 16, 2026 at 14:05" / "16 octobre 2026 à 14:05").
+        return DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.SHORT, Locale.getDefault())
+            .format(Date(time))
     }
 
     /**
@@ -318,7 +334,8 @@ open class GoogleDriveBackupManager(
     ): Result<DriveBackupInfo> = withContext(Dispatchers.IO) {
         val json = exportBackupJson(tasks, completions, categories, exclusions)
         val result = driveService.uploadBackup(json)
-        result.onSuccess { info ->
+        result.onSuccess {
+            setSyncConflictPending(false)
             prefs.edit()
                 .putLong(KEY_LAST_BACKUP_TIME, System.currentTimeMillis())
                 .putInt(KEY_LAST_BACKUP_COUNT, tasks.size)
@@ -354,6 +371,7 @@ open class GoogleDriveBackupManager(
                 .putInt(KEY_LAST_BACKUP_COUNT, parsed.tasks.size)
                 .putInt(KEY_LAST_BACKUP_CATEGORIES_COUNT, parsed.categories.size)
                 .putBoolean(KEY_HAS_CHECKED_INSTALL_RESTORE, true)
+                .putBoolean(KEY_SYNC_CONFLICT, false)
                 .apply()
 
             Result.success(RestoreResultData(parsed.tasks.size, parsed.categories.size))

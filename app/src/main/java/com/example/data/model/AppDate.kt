@@ -1,6 +1,9 @@
 package com.example.data.model
 
+import java.text.DateFormat
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.GregorianCalendar
 import java.util.Locale
 
 /**
@@ -65,17 +68,38 @@ data class AppDate(
         return this.toEpochDay() - other.toEpochDay()
     }
 
-    fun formatEuropean(includeYear: Boolean = true): String {
-        return if (includeYear) "$day ${monthName(month)} $year" else "$day ${monthName(month)}"
+    /**
+     * Localized long date, e.g. "16 October 2026" (en-GB), "October 16, 2026" (en-US) or
+     * "16. Oktober 2026" (de). Without the year only day and month are shown, in the order
+     * the locale uses. (Name kept for existing callers; the output is no longer European-only.)
+     */
+    fun formatEuropean(includeYear: Boolean = true, locale: Locale = Locale.getDefault()): String {
+        if (includeYear) {
+            return DateFormat.getDateInstance(DateFormat.LONG, locale).format(toJavaDate())
+        }
+        return format(if (dayBeforeMonth(locale)) "d MMMM" else "MMMM d", locale)
     }
 
-    fun formatEuropeanShort(includeYear: Boolean = true): String {
-        return if (includeYear) "$day ${monthNameShort(month)} $year" else "$day ${
-            monthNameShort(
-                month
-            )
-        }"
+    /** Localized date with an abbreviated month, e.g. "16 Oct 2026" or "Oct 16, 2026". */
+    fun formatEuropeanShort(
+        includeYear: Boolean = true,
+        locale: Locale = Locale.getDefault()
+    ): String {
+        val dayFirst = dayBeforeMonth(locale)
+        val pattern = when {
+            !includeYear -> if (dayFirst) "d MMM" else "MMM d"
+            yearFirst(locale) -> "y MMM d"
+            dayFirst -> "d MMM y"
+            else -> "MMM d, y"
+        }
+        return format(pattern, locale)
     }
+
+    private fun toJavaDate(): java.util.Date =
+        GregorianCalendar(year, month - 1, day).time
+
+    private fun format(pattern: String, locale: Locale): String =
+        SimpleDateFormat(pattern, locale).format(toJavaDate())
 
     override fun compareTo(other: AppDate): Int {
         val yCmp = year.compareTo(other.year)
@@ -127,66 +151,45 @@ data class AppDate(
             }
         }
 
-        fun monthName(month: Int): String {
-            return when (month) {
-                1 -> "January"
-                2 -> "February"
-                3 -> "March"
-                4 -> "April"
-                5 -> "May"
-                6 -> "June"
-                7 -> "July"
-                8 -> "August"
-                9 -> "September"
-                10 -> "October"
-                11 -> "November"
-                12 -> "December"
-                else -> ""
-            }
+        private fun longPattern(locale: Locale): String =
+            (DateFormat.getDateInstance(DateFormat.LONG, locale) as? SimpleDateFormat)
+                ?.toPattern()
+                .orEmpty()
+
+        private fun indexOfAny(pattern: String, vararg letters: Char): Int =
+            pattern.indexOfFirst { it in letters }.let { if (it < 0) Int.MAX_VALUE else it }
+
+        private fun dayBeforeMonth(locale: Locale): Boolean {
+            val pattern = longPattern(locale)
+            return indexOfAny(pattern, 'd') < indexOfAny(pattern, 'M', 'L')
         }
 
-        fun monthNameShort(month: Int): String {
-            return when (month) {
-                1 -> "Jan"
-                2 -> "Feb"
-                3 -> "Mar"
-                4 -> "Apr"
-                5 -> "May"
-                6 -> "Jun"
-                7 -> "Jul"
-                8 -> "Aug"
-                9 -> "Sep"
-                10 -> "Oct"
-                11 -> "Nov"
-                12 -> "Dec"
-                else -> ""
-            }
+        private fun yearFirst(locale: Locale): Boolean {
+            val pattern = longPattern(locale)
+            val y = indexOfAny(pattern, 'y', 'u')
+            return y < indexOfAny(pattern, 'd') && y < indexOfAny(pattern, 'M', 'L')
         }
 
-        fun dayOfWeekName(dow: Int): String {
-            return when (dow) {
-                1 -> "Monday"
-                2 -> "Tuesday"
-                3 -> "Wednesday"
-                4 -> "Thursday"
-                5 -> "Friday"
-                6 -> "Saturday"
-                7 -> "Sunday"
-                else -> ""
-            }
-        }
+        private fun standalone(pattern: String, date: AppDate, locale: Locale): String =
+            SimpleDateFormat(pattern, locale).format(date.toJavaDate())
+                .replaceFirstChar { it.titlecase(locale) }
 
-        fun dayOfWeekShort(dow: Int): String {
-            return when (dow) {
-                1 -> "Mon"
-                2 -> "Tue"
-                3 -> "Wed"
-                4 -> "Thu"
-                5 -> "Fri"
-                6 -> "Sat"
-                7 -> "Sun"
-                else -> ""
-            }
-        }
+        /** Standalone, localized month name (1-12), e.g. "October". */
+        fun monthName(month: Int, locale: Locale = Locale.getDefault()): String =
+            if (month in 1..12) standalone("LLLL", AppDate(2024, month, 1), locale) else ""
+
+        fun monthNameShort(month: Int, locale: Locale = Locale.getDefault()): String =
+            if (month in 1..12) standalone("LLL", AppDate(2024, month, 1), locale) else ""
+
+        /** Localized weekday name for an ISO day of week (1 = Monday ... 7 = Sunday). */
+        fun dayOfWeekName(dow: Int, locale: Locale = Locale.getDefault()): String =
+            if (dow in 1..7) {
+                standalone("EEEE", AppDate(2024, 1, 1).plusDays(dow - 1L), locale)
+            } else ""
+
+        fun dayOfWeekShort(dow: Int, locale: Locale = Locale.getDefault()): String =
+            if (dow in 1..7) {
+                standalone("EEE", AppDate(2024, 1, 1).plusDays(dow - 1L), locale)
+            } else ""
     }
 }

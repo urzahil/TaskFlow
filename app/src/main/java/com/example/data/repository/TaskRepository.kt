@@ -1,5 +1,6 @@
 package com.example.data.repository
 
+import android.database.sqlite.SQLiteConstraintException
 import com.example.data.db.TaskDao
 import com.example.data.model.AppDate
 import com.example.data.model.CategoryEntity
@@ -44,6 +45,9 @@ class TaskRepository(private val taskDao: TaskDao) {
 
     suspend fun insertCategory(category: CategoryEntity) = taskDao.insertCategory(category)
 
+    /** Adds a category, rejecting names that already exist (case-insensitively). */
+    suspend fun addCategory(category: CategoryEntity) = taskDao.addCategoryChecked(category)
+
     suspend fun insertCategories(categories: List<CategoryEntity>) =
         taskDao.insertCategories(categories)
 
@@ -81,7 +85,11 @@ class TaskRepository(private val taskDao: TaskDao) {
         if (currentlyCompleted) {
             taskDao.deleteCompletion(taskId, dateIso)
         } else {
-            taskDao.insertCompletion(TaskCompletionEntity(taskId = taskId, date = dateIso))
+            try {
+                taskDao.insertCompletion(TaskCompletionEntity(taskId = taskId, date = dateIso))
+            } catch (_: SQLiteConstraintException) {
+                // The task was deleted (for example by rollover) while the toggle was in flight.
+            }
         }
     }
 

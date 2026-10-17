@@ -39,7 +39,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -536,7 +538,9 @@ fun MainScreen(
                                 try {
                                     val json = viewModel.getBackupJsonString()
                                     val fileName = generateBackupFileName()
-                                    GoogleOAuthHelper.shareBackupFile(context, json, fileName)
+                                    if (!GoogleOAuthHelper.shareBackupFile(context, json, fileName)) {
+                                        snackbarHostState.showSnackbar("Could not prepare the backup file for sharing")
+                                    }
                                 } catch (e: Exception) {
                                     snackbarHostState.showSnackbar("Failed to share backup: ${e.message}")
                                 }
@@ -559,6 +563,35 @@ fun MainScreen(
                     )
                 }
             }
+        }
+    }
+
+    // Drive already holds a backup and this device has its own data: let the user choose.
+    if (driveSyncState.syncConflict && !driveSyncState.isSyncing) {
+        var dismissed by remember { mutableStateOf(false) }
+        if (!dismissed) {
+            AlertDialog(
+                onDismissRequest = { dismissed = true },
+                title = { Text("Backup found in Google Drive") },
+                text = {
+                    Text(
+                        "This device already has tasks, and your Drive account has a backup. Automatic backup is paused so neither side is overwritten by accident.\n\nChoose which data to keep. You can also decide later in Settings."
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.resolveSyncConflictKeepDrive() }) {
+                        Text("Use Drive backup")
+                    }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = { dismissed = true }) { Text("Decide later") }
+                        TextButton(onClick = { viewModel.resolveSyncConflictUseThisDevice() }) {
+                            Text("Keep this device")
+                        }
+                    }
+                }
+            )
         }
     }
 

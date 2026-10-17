@@ -108,12 +108,38 @@ interface TaskDao {
     @Query("DELETE FROM categories WHERE name = :name")
     suspend fun deleteCategoryByName(name: String)
 
+    @Query("SELECT * FROM categories WHERE name = :name COLLATE NOCASE LIMIT 1")
+    suspend fun findCategoryIgnoreCase(name: String): CategoryEntity?
+
+    @Query(
+        "SELECT COUNT(*) FROM categories WHERE name = :name COLLATE NOCASE AND name != :excluding"
+    )
+    suspend fun countCategoriesNamedExcluding(name: String, excluding: String): Int
+
+    @Query("SELECT * FROM categories WHERE isDefault = 1 AND name != :excluding ORDER BY name LIMIT 1")
+    suspend fun getDefaultCategoryExcluding(excluding: String): CategoryEntity?
+
+    @Transaction
+    suspend fun addCategoryChecked(category: CategoryEntity) {
+        if (findCategoryIgnoreCase(category.name) != null) {
+            throw CategoryNameConflictException(category.name)
+        }
+        insertCategory(category)
+    }
+
     @Transaction
     suspend fun updateCategoryAtomically(
         oldName: String,
         newCategory: CategoryEntity,
         newColor: Long
     ) {
+        // Category names are the primary key, so a rename onto another existing name
+        // (case-insensitively) would silently merge or replace that category.
+        if (oldName != newCategory.name &&
+            countCategoriesNamedExcluding(newCategory.name, oldName) > 0
+        ) {
+            throw CategoryNameConflictException(newCategory.name)
+        }
         insertCategory(newCategory)
         if (oldName == newCategory.name) {
             updateTasksColorByCategory(newCategory.name, newColor)
@@ -123,14 +149,24 @@ interface TaskDao {
         }
     }
 
+    /**
+     * Deletes a category and moves its tasks to the default category (or to a freshly created
+     * "General" when no other default exists), taking over that category's colour.
+     */
     @Transaction
-    suspend fun deleteCategoryAtomically(categoryName: String, newColor: Long) {
-        reassignCategoryTasks(categoryName, newColor)
+    suspend fun deleteCategoryAtomically(categoryName: String, fallbackColor: Long) {
+        var target = getDefaultCategoryExcluding(categoryName)
+        if (target == null) {
+            if (categoryName.equals("General", ignoreCase = true)) {
+                throw LastDefaultCategoryException()
+            }
+            target = findCategoryIgnoreCase("General")
+                ?: CategoryEntity("General", fallbackColor, "general", isDefault = true)
+                    .also { insertCategory(it) }
+        }
+        updateTasksCategory(categoryName, target.name, target.colorHex)
         deleteCategoryByName(categoryName)
     }
-
-    @Query("UPDATE tasks SET category = 'General', colorHex = :newColor WHERE category = :categoryName")
-    suspend fun reassignCategoryTasks(categoryName: String, newColor: Long)
 
     @Query("UPDATE tasks SET category = :newCategory, colorHex = :newColor WHERE category = :oldCategory")
     suspend fun updateTasksCategory(oldCategory: String, newCategory: String, newColor: Long)
@@ -241,3 +277,9 @@ interface TaskDao {
         }
     }
 }
+
+class CategoryNameConflictException(val name: String) :
+    IllegalArgumentException("A category named \"$name\" already exists")
+
+class LastDefaultCategoryException :
+    IllegalStateException("The default category cannot be deleted")

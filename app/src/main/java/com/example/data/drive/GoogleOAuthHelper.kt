@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.core.content.FileProvider
 import java.io.File
 import java.security.MessageDigest
@@ -52,7 +53,10 @@ object GoogleOAuthHelper {
 
     fun shareBackupFile(context: Context, jsonContent: String, fileName: String): Boolean {
         return try {
-            val cacheFile = File(context.cacheDir, fileName)
+            // Matches the narrow cache-path in file_paths.xml; old shared backups are removed first.
+            val backupDir = File(context.cacheDir, "backups").apply { mkdirs() }
+            backupDir.listFiles()?.forEach { it.delete() }
+            val cacheFile = File(backupDir, fileName)
             cacheFile.writeText(jsonContent)
             val uri = FileProvider.getUriForFile(
                 context,
@@ -70,6 +74,7 @@ object GoogleOAuthHelper {
             context.startActivity(chooser)
             true
         } catch (e: Exception) {
+            Log.e("GoogleOAuthHelper", "Failed to share backup file", e)
             false
         }
     }
