@@ -45,12 +45,12 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           set -eu
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
-          test -s "$RUNNER_TEMP/release.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.p12"
+          test -s "$RUNNER_TEMP/release.p12"
 
       - name: Build signed release APK
         env:
-          KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          KEYSTORE_PATH: ${{ runner.temp }}/release.p12
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
