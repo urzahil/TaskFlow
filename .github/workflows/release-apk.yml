@@ -24,23 +24,37 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Validate release secrets
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Required repository secret $name is not configured."
+              exit 1
+            fi
+          done
+
       - name: Restore release keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          test -n "$KEYSTORE_BASE64" || { echo "KEYSTORE_BASE64 secret is not configured"; exit 1; }
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "${{ runner.temp }}/taskflow-release.jks"
-          test -s "${{ runner.temp }}/taskflow-release.jks"
+          set -eu
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.p12"
+          test -s "$RUNNER_TEMP/release.p12"
 
       - name: Build signed release APK
         env:
-          KEYSTORE_PATH: ${{ runner.temp }}/taskflow-release.jks
+          KEYSTORE_PATH: ${{ runner.temp }}/release.p12
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          test -n "$STORE_PASSWORD" || { echo "STORE_PASSWORD secret is not configured"; exit 1; }
-          test -n "$KEY_PASSWORD" || { echo "KEY_PASSWORD secret is not configured"; exit 1; }
-          ./gradlew clean testDebugUnitTest assembleRelease --no-daemon
+        run: ./gradlew clean testDebugUnitTest assembleRelease --no-daemon
 
       - name: Prepare release APK
         run: |
