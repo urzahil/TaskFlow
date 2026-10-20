@@ -27,7 +27,7 @@ android {
             create("release") {
                 storeFile = releaseKeystore
                 storePassword = System.getenv("STORE_PASSWORD")
-                keyAlias = "upload"
+                keyAlias = System.getenv("KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "upload"
                 keyPassword = System.getenv("KEY_PASSWORD")
             }
         }
