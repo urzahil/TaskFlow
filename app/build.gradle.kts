@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example"
+    namespace = "rocks.urzahil.taskflow"
     compileSdk { version = release(36) { minorApiLevel = 1 } }
 
     defaultConfig {
-        applicationId = "com.aistudio.taskflow.plvqrm"
+        applicationId = "rocks.urzahil.taskflow"
         minSdk = 24
         targetSdk = 36
         versionCode = 13
