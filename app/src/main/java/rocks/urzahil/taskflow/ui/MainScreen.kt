@@ -84,12 +84,7 @@ fun MainScreen(
     val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     val selectedYearMonth by viewModel.selectedYearMonth.collectAsStateWithLifecycle()
-    val dailyTasks by viewModel.dailyTasks.collectAsStateWithLifecycle()
-    val monthlySelectedDayTasks by viewModel.monthlySelectedDayTasks.collectAsStateWithLifecycle()
-    val dailyStats by viewModel.dailyStats.collectAsStateWithLifecycle()
     val taskFilter by viewModel.taskFilter.collectAsStateWithLifecycle()
-    val monthSummaries by viewModel.monthDaysSummary.collectAsStateWithLifecycle()
-    val weekDaysSummary by viewModel.weekDaysSummary.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
 
@@ -104,7 +99,6 @@ fun MainScreen(
     val showMonthlyView by viewModel.showMonthlyView.collectAsStateWithLifecycle()
     val showListView by viewModel.showListView.collectAsStateWithLifecycle()
     val startViewMode by viewModel.startViewMode.collectAsStateWithLifecycle()
-    val next7DaysTasks by viewModel.next7DaysTasks.collectAsStateWithLifecycle()
     val currentToday by viewModel.currentToday.collectAsStateWithLifecycle()
     val lastRolloverInfo by viewModel.lastRolloverInfo.collectAsStateWithLifecycle()
     val rolloverCleanupEnabled by viewModel.rolloverCleanupEnabled.collectAsStateWithLifecycle()
@@ -431,8 +425,12 @@ fun MainScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            // Each view collects only its own lists, so hidden views stop computing them.
             when (viewMode) {
                 ViewMode.DAILY -> {
+                    val dailyTasks by viewModel.dailyTasks.collectAsStateWithLifecycle()
+                    val dailyStats by viewModel.dailyStats.collectAsStateWithLifecycle()
+                    val weekDaysSummary by viewModel.weekDaysSummary.collectAsStateWithLifecycle()
                     DailyView(
                         selectedDate = selectedDate,
                         tasks = dailyTasks,
@@ -455,6 +453,9 @@ fun MainScreen(
                 }
 
                 ViewMode.MONTHLY -> {
+                    val monthSummaries by viewModel.monthDaysSummary.collectAsStateWithLifecycle()
+                    val monthlySelectedDayTasks by
+                        viewModel.monthlySelectedDayTasks.collectAsStateWithLifecycle()
                     MonthlyView(
                         yearMonth = selectedYearMonth,
                         selectedDate = selectedDate,
@@ -471,6 +472,7 @@ fun MainScreen(
                 }
 
                 ViewMode.LIST -> {
+                    val next7DaysTasks by viewModel.next7DaysTasks.collectAsStateWithLifecycle()
                     ListView(
                         days = next7DaysTasks,
                         onToggleTask = { viewModel.toggleTaskCompletion(it) }

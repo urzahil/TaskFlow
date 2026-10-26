@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -416,78 +418,77 @@ class TaskViewModel(
         }
     }
 
-    /** Tasks scheduled on [date], minus individually deleted occurrences, with completion state. */
-    private fun tasksOnDate(
+    /**
+     * Tasks, completions and exclusions as of the latest database change, with every task's
+     * recurrence rules parsed once. All task lists and summaries below derive from this, so a
+     * change costs three queries and one parse instead of one per list.
+     */
+    private class ScheduleSnapshot(
         tasks: List<TaskEntity>,
         completions: List<TaskCompletionEntity>,
-        exclusions: OccurrenceExclusions,
-        date: AppDate
-    ): List<TaskItemUi> {
-        val dateIso = date.toIsoString()
-        val completedTaskIds = completions
-            .asSequence()
-            .filter { it.date == dateIso }
-            .map { it.taskId }
-            .toSet()
-        return tasks
-            .filter { task ->
-                repository.isTaskScheduledOnDate(task, date) && !exclusions.contains(task.id, dateIso)
+        private val exclusions: OccurrenceExclusions
+    ) {
+        /** Tasks in display order with their schedules; tasks with an unparseable start are never shown. */
+        private val scheduled: List<Pair<TaskEntity, TaskSchedule>> =
+            tasks.mapNotNull { task -> TaskSchedule.from(task)?.let { task to it } }
+        private val completedIdsByDate: Map<String, Set<Long>> =
+            completions.groupBy({ it.date }, { it.taskId }).mapValues { (_, ids) -> ids.toHashSet() }
+
+        private fun scheduledOn(date: AppDate, dateIso: String) = scheduled.filter { (_, schedule) ->
+            schedule.isScheduledOn(date) && !exclusions.contains(schedule.taskId, dateIso)
+        }
+
+        /** Tasks scheduled on [date], minus individually deleted occurrences, with completion state. */
+        fun tasksOn(date: AppDate): List<TaskItemUi> {
+            val dateIso = date.toIsoString()
+            val completedIds = completedIdsByDate[dateIso].orEmpty()
+            return scheduledOn(date, dateIso).map { (task, _) ->
+                TaskItemUi(task = task, date = date, isCompleted = task.id in completedIds)
             }
-            .map { task ->
-                TaskItemUi(task = task, date = date, isCompleted = task.id in completedTaskIds)
+        }
+
+        /** Per-day summaries for [dates], leaving out days with nothing scheduled. */
+        fun summarize(dates: List<AppDate>): Map<String, DaySummaryUi> {
+            val summaryMap = mutableMapOf<String, DaySummaryUi>()
+            for (date in dates) {
+                val dateIso = date.toIsoString()
+                val scheduledSchedules = scheduledOn(date, dateIso)
+                if (scheduledSchedules.isEmpty()) continue
+                val completedIds = completedIdsByDate[dateIso].orEmpty()
+                summaryMap[dateIso] = DaySummaryUi(
+                    date = date,
+                    totalTasks = scheduledSchedules.size,
+                    completedTasks = scheduledSchedules.count { (task, _) -> task.id in completedIds },
+                    taskColors = scheduledSchedules.take(3).map { (_, schedule) -> schedule.colorHex }
+                )
             }
+            return summaryMap
+        }
     }
+
+    private val snapshot = combine(
+        repository.allTasks,
+        repository.allCompletions,
+        repository.allOccurrenceExclusions
+    ) { tasks, completions, exclusions ->
+        ScheduleSnapshot(tasks, completions, OccurrenceExclusions(exclusions))
+    }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(5000), replay = 1)
 
     private fun TaskItemUi.matches(query: String): Boolean =
         task.title.contains(query, ignoreCase = true) ||
                 task.description.contains(query, ignoreCase = true) ||
                 task.category.contains(query, ignoreCase = true)
 
-    /** Builds the per-day summaries for [dates] from schedules that were parsed once. */
-    private fun summarizeDays(
-        tasks: List<TaskEntity>,
-        completions: List<TaskCompletionEntity>,
-        exclusions: OccurrenceExclusions,
-        dates: List<AppDate>
-    ): Map<String, DaySummaryUi> {
-        val schedules = tasks.mapNotNull { TaskSchedule.from(it) }
-        val completionsByDate = completions.groupBy { it.date }
-        val summaryMap = mutableMapOf<String, DaySummaryUi>()
-        for (date in dates) {
-            val dateIso = date.toIsoString()
-            val completedIds: Set<Long> =
-                completionsByDate[dateIso]?.mapTo(HashSet()) { it.taskId } ?: emptySet()
-            val scheduled = schedules.filter {
-                it.isScheduledOn(date) && !exclusions.contains(it.taskId, dateIso)
-            }
-            if (scheduled.isNotEmpty()) {
-                summaryMap[dateIso] = DaySummaryUi(
-                    date = date,
-                    totalTasks = scheduled.size,
-                    completedTasks = scheduled.count { it.taskId in completedIds },
-                    taskColors = scheduled.take(3).map { it.colorHex }
-                )
-            }
-        }
-        return summaryMap
-    }
-
     /**
      * Tasks for the currently selected date.
      */
     val dailyTasks: StateFlow<List<TaskItemUi>> = combine(
-        combine(
-            repository.allTasks,
-            repository.allCompletions,
-            repository.allOccurrenceExclusions
-        ) { tasks, completions, exclusions ->
-            Triple(tasks, completions, OccurrenceExclusions(exclusions))
-        },
+        snapshot,
         _selectedDate,
         _taskFilter,
         _searchQuery
-    ) { (tasks, completions, exclusions), date, filter, query ->
-        val items = tasksOnDate(tasks, completions, exclusions, date)
+    ) { snap, date, filter, query ->
+        val items = snap.tasksOn(date)
         val queryFiltered = if (query.isBlank()) items else items.filter { it.matches(query) }
         when (filter) {
             TaskFilter.ALL -> queryFiltered
@@ -505,12 +506,10 @@ class TaskViewModel(
      * for the selected date regardless of the completion filter (All, pending, done) on the daily page.
      */
     val monthlySelectedDayTasks: StateFlow<List<TaskItemUi>> = combine(
-        repository.allTasks,
-        repository.allCompletions,
-        repository.allOccurrenceExclusions,
+        snapshot,
         _selectedDate
-    ) { tasks, completions, exclusions, date ->
-        tasksOnDate(tasks, completions, OccurrenceExclusions(exclusions), date)
+    ) { snap, date ->
+        snap.tasksOn(date)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -521,16 +520,13 @@ class TaskViewModel(
      * Tasks for the next 7 days (today and 6 more) for the 7-day List view.
      */
     val next7DaysTasks: StateFlow<List<DayTasksGroupUi>> = combine(
-        repository.allTasks,
-        repository.allCompletions,
-        repository.allOccurrenceExclusions,
+        snapshot,
         _currentToday,
         _searchQuery
-    ) { tasks, completions, exclusionList, today, query ->
-        val exclusions = OccurrenceExclusions(exclusionList)
+    ) { snap, today, query ->
         (0L..6L).map { offset ->
             val date = today.plusDays(offset)
-            val items = tasksOnDate(tasks, completions, exclusions, date)
+            val items = snap.tasksOn(date)
             DayTasksGroupUi(
                 date = date,
                 dayName = AppDate.dayOfWeekName(date.dayOfWeek()),
@@ -544,44 +540,28 @@ class TaskViewModel(
     )
 
     /**
-     * Statistics for the currently selected date (total, completed). Kept aligned with
-     * dailyTasks: individually deleted recurring occurrences do not count.
+     * Statistics for the currently selected date (total, completed). Derived from the unfiltered
+     * day list, so individually deleted recurring occurrences do not count.
      */
-    val dailyStats: StateFlow<DailyStats> = combine(
-        repository.allTasks,
-        repository.allCompletions,
-        repository.allOccurrenceExclusions,
-        _selectedDate
-    ) { tasks, completions, exclusions, date ->
-        val items = tasksOnDate(tasks, completions, OccurrenceExclusions(exclusions), date)
-        DailyStats(total = items.size, completed = items.count { it.isCompleted })
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = DailyStats()
-    )
+    val dailyStats: StateFlow<DailyStats> = monthlySelectedDayTasks
+        .map { items -> DailyStats(total = items.size, completed = items.count { it.isCompleted }) }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = DailyStats()
+        )
 
     /**
      * Map of Date ISO string to DaySummaryUi for all days in the currently selected month.
-     * Highlighting days with something scheduled!
      */
     val monthDaysSummary: StateFlow<Map<String, DaySummaryUi>> = combine(
-        repository.allTasks,
-        repository.allCompletions,
-        repository.allOccurrenceExclusions,
-        _selectedYearMonth,
-        _viewMode
-    ) { tasks, completions, exclusions, (year, month), currentViewMode ->
-        // Avoid month-summary work when the monthly view is not active
-        if (currentViewMode != ViewMode.MONTHLY) {
-            emptyMap()
-        } else {
-            val days = (1..AppDate.daysInMonth(year, month)).map { AppDate(year, month, it) }
-            summarizeDays(tasks, completions, OccurrenceExclusions(exclusions), days)
-        }
+        snapshot,
+        _selectedYearMonth
+    ) { snap, (year, month) ->
+        snap.summarize((1..AppDate.daysInMonth(year, month)).map { AppDate(year, month, it) })
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.Eagerly,
+        started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyMap()
     )
 
@@ -589,16 +569,13 @@ class TaskViewModel(
      * Map of Date ISO string to DaySummaryUi for the 7 days visible in the Daily view's week list strip.
      */
     val weekDaysSummary: StateFlow<Map<String, DaySummaryUi>> = combine(
-        repository.allTasks,
-        repository.allCompletions,
-        repository.allOccurrenceExclusions,
+        snapshot,
         _selectedDate
-    ) { tasks, completions, exclusions, selectedDate ->
-        val stripDays = (-3..3).map { selectedDate.plusDays(it.toLong()) }
-        summarizeDays(tasks, completions, OccurrenceExclusions(exclusions), stripDays)
+    ) { snap, selectedDate ->
+        snap.summarize((-3..3).map { selectedDate.plusDays(it.toLong()) })
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.Eagerly,
+        started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyMap()
     )
 

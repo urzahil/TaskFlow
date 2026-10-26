@@ -77,8 +77,12 @@ class GoogleDriveService(private val context: Context) {
     /**
      * Finds existing backup file metadata in Google Drive appDataFolder
      */
-    suspend fun findBackupFile(): DriveBackupInfo? = withContext(Dispatchers.IO) {
-        val token = getAccessToken() ?: return@withContext null
+    suspend fun findBackupFile(): DriveBackupInfo? {
+        val token = getAccessToken() ?: return null
+        return findBackupFile(token)
+    }
+
+    private suspend fun findBackupFile(token: String): DriveBackupInfo? = withContext(Dispatchers.IO) {
         try {
             val url = "https://www.googleapis.com/drive/v3/files" +
                     "?spaces=appDataFolder" +
@@ -123,7 +127,7 @@ class GoogleDriveService(private val context: Context) {
             val token = getAccessToken()
                 ?: return@withContext Result.failure(Exception("Not signed in or missing Drive permission"))
 
-            val existingFile = findBackupFile()
+            val existingFile = findBackupFile(token)
             try {
                 if (existingFile != null) {
                     // Update existing file content
@@ -210,7 +214,7 @@ class GoogleDriveService(private val context: Context) {
         val token = getAccessToken()
             ?: return@withContext Result.failure(Exception("Not signed in or missing Drive permission"))
 
-        val existingFile = findBackupFile()
+        val existingFile = findBackupFile(token)
             ?: return@withContext Result.failure(Exception("No backup file found in Google Drive"))
 
         try {

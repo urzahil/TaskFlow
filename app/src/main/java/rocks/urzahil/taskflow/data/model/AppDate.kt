@@ -5,6 +5,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.GregorianCalendar
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * A lightweight, self-contained date representation (year, month 1-12, day 1-31)
@@ -22,10 +23,21 @@ data class AppDate(
     }
 
     /**
-     * Converts date to ISO string "YYYY-MM-DD"
+     * Converts date to ISO string "YYYY-MM-DD". Built by hand rather than with String.format
+     * because it runs for every day of every calendar and summary calculation.
      */
     fun toIsoString(): String {
-        return String.format(Locale.ROOT, "%04d-%02d-%02d", year, month, day)
+        if (year !in 0..9999) return String.format(Locale.ROOT, "%04d-%02d-%02d", year, month, day)
+        return buildString(10) {
+            if (year < 1000) append('0')
+            if (year < 100) append('0')
+            if (year < 10) append('0')
+            append(year)
+            append(if (month < 10) "-0" else "-")
+            append(month)
+            append(if (day < 10) "-0" else "-")
+            append(day)
+        }
     }
 
     /**
@@ -151,10 +163,14 @@ data class AppDate(
             }
         }
 
-        private fun longPattern(locale: Locale): String =
+        private val longPatterns = ConcurrentHashMap<Locale, String>()
+
+        /** The locale's long date pattern; looked up once per locale since it is costly to build. */
+        private fun longPattern(locale: Locale): String = longPatterns.getOrPut(locale) {
             (DateFormat.getDateInstance(DateFormat.LONG, locale) as? SimpleDateFormat)
                 ?.toPattern()
                 .orEmpty()
+        }
 
         private fun indexOfAny(pattern: String, vararg letters: Char): Int =
             pattern.indexOfFirst { it in letters }.let { if (it < 0) Int.MAX_VALUE else it }

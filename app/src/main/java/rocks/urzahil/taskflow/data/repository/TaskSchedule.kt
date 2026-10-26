@@ -15,10 +15,13 @@ class TaskSchedule private constructor(
     val taskId: Long,
     val colorHex: Long,
     val isRecurring: Boolean,
-    private val start: AppDate,
-    private val end: AppDate?,
-    private val interval: Int,
-    private val weekdays: Set<Int>
+    val start: AppDate,
+    /** Null when the task repeats indefinitely (or its end date is unparseable). */
+    val end: AppDate?,
+    /** Days between occurrences when [weekdays] is empty; always at least 1. */
+    val interval: Int,
+    /** ISO weekdays (1 = Monday) the task repeats on; empty for every-N-days tasks. */
+    val weekdays: Set<Int>
 ) {
     fun isScheduledOn(date: AppDate): Boolean {
         if (!isRecurring) return date == start

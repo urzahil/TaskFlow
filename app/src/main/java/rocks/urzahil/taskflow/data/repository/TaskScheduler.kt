@@ -15,10 +15,9 @@ object TaskScheduler {
         val completedNonRecurringIds = completedNonRecurringTasks.map { it.id }.toSet()
         val pastTasks = taskDao.getPastNonRecurringTasks(todayIso)
             .filterNot { it.id in completedNonRecurringIds }
-        val allCompletions = taskDao.getAllCompletionsList()
-        val completionKeys = allCompletions.map { "${it.taskId}_${it.date}" }.toSet()
-        val exclusionKeys = taskDao.getAllOccurrenceExclusionsList()
-            .map { "${it.taskId}_${it.date}" }.toSet()
+        val completionKeys = taskDao.getAllCompletionsList().mapTo(HashSet()) { key(it.taskId, it.date) }
+        val exclusionKeys =
+            taskDao.getAllOccurrenceExclusionsList().mapTo(HashSet()) { key(it.taskId, it.date) }
 
         var cleanedCount = 0
         var movedCount = 0
@@ -40,86 +39,48 @@ object TaskScheduler {
 
         val recurringTasks = taskDao.getAllRecurringTasks()
         for (task in recurringTasks) {
-            val start = try {
-                AppDate.parseIso(task.startDate)
-            } catch (_: Exception) {
-                null
-            } ?: continue
+            val schedule = TaskSchedule.from(task) ?: continue
+            val start = schedule.start
+            val end = schedule.end
+            val weekdays = schedule.weekdays
 
-            val end = task.endDate?.takeIf { it.isNotBlank() }?.let {
-                try {
-                    AppDate.parseIso(it)
-                } catch (_: IllegalArgumentException) {
-                    null
-                }
-            }
             val lastPastDate = minOf(today.minusDays(1), end ?: today.minusDays(1))
             if (start <= lastPastDate) {
                 val span = lastPastDate.daysBetween(start) + 1
-                val weekdays = task.parsedDaysOfWeek()
                 val count = if (weekdays.isEmpty()) {
-                    (span - 1) / task.recurrenceDays.coerceAtLeast(1) + 1
+                    (span - 1) / schedule.interval + 1
                 } else {
                     (span / 7) * weekdays.size + (0L until span % 7).count {
                         start.plusDays(it).dayOfWeek() in weekdays
                     }
                 }
                 val excludedPastOccurrences = (0L until span).count { offset ->
-                    "${task.id}_${start.plusDays(offset).toIsoString()}" in exclusionKeys
+                    key(task.id, start.plusDays(offset).toIsoString()) in exclusionKeys
                 }
                 cleanedRecurringOccurrences =
-                    (cleanedRecurringOccurrences.toLong() + (count - excludedPastOccurrences).coerceAtLeast(
-                        0
-                    ))
+                    (cleanedRecurringOccurrences.toLong() + (count - excludedPastOccurrences).coerceAtLeast(0))
                         .coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             }
 
-            if (!task.endDate.isNullOrBlank()) {
-                val expiredEnd = try {
-                    AppDate.parseIso(task.endDate)
-                } catch (_: Exception) {
-                    null
-                }
-                if (expiredEnd != null && expiredEnd < today) {
-                    tasksToDelete.add(task)
-                    cleanedCount++
-                    continue
-                }
+            if (end != null && end < today) {
+                tasksToDelete.add(task)
+                cleanedCount++
+                continue
             }
 
             if (start < today) {
-                val nextOccurrence: AppDate
-                val validDaysOfWeek = task.parsedDaysOfWeek()
-                if (validDaysOfWeek.isNotEmpty()) {
-                    var candidate = today
-                    var found = false
-                    for (step in 0..7) {
-                        if (candidate.dayOfWeek() in validDaysOfWeek) {
-                            found = true
-                            break
-                        }
-                        candidate = candidate.plusDays(1)
-                    }
-                    nextOccurrence = if (found) candidate else today
+                val nextOccurrence = if (weekdays.isNotEmpty()) {
+                    // Weekdays are always within 1..7, so one of the next seven days matches.
+                    (0L..6L).map { today.plusDays(it) }.first { it.dayOfWeek() in weekdays }
                 } else {
-                    val interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1
-                    val diffDays = today.daysBetween(start)
-                    val remainder = diffDays % interval
-                    val daysToNext = if (remainder == 0L) 0L else (interval - remainder)
-                    nextOccurrence = today.plusDays(daysToNext)
+                    val remainder = today.daysBetween(start) % schedule.interval
+                    today.plusDays(if (remainder == 0L) 0L else schedule.interval - remainder)
                 }
 
-                if (!task.endDate.isNullOrBlank()) {
-                    val expiredEnd = try {
-                        AppDate.parseIso(task.endDate)
-                    } catch (_: Exception) {
-                        null
-                    }
-                    if (expiredEnd != null && nextOccurrence > expiredEnd) {
-                        tasksToDelete.add(task)
-                        cleanedCount++
-                        continue
-                    }
+                if (end != null && nextOccurrence > end) {
+                    tasksToDelete.add(task)
+                    cleanedCount++
+                    continue
                 }
 
                 var hadUncompletedPastOccurrence = false
@@ -128,10 +89,9 @@ object TaskScheduler {
                     val checkDays = minOf(pastDaysToCheck, 30L)
                     for (offset in 0L..checkDays) {
                         val d = today.minusDays(1 + offset)
-                        if (d >= start && isTaskScheduledOnDate(task, d)) {
-                            if ("${task.id}_${d.toIsoString()}" !in completionKeys &&
-                                "${task.id}_${d.toIsoString()}" !in exclusionKeys
-                            ) {
+                        if (d >= start && schedule.isScheduledOn(d)) {
+                            val dayKey = key(task.id, d.toIsoString())
+                            if (dayKey !in completionKeys && dayKey !in exclusionKeys) {
                                 hadUncompletedPastOccurrence = true
                                 break
                             }
@@ -162,4 +122,6 @@ object TaskScheduler {
 
     fun isTaskScheduledOnDate(task: TaskEntity, targetDate: AppDate): Boolean =
         TaskSchedule.from(task)?.isScheduledOn(targetDate) ?: false
+
+    private fun key(taskId: Long, dateIso: String) = "${taskId}_$dateIso"
 }
