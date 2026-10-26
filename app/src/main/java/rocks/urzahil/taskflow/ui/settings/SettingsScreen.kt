@@ -1822,7 +1822,7 @@ private fun CategoryFormDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    CategoryIcons.AVAILABLE_ICONS.take(12).forEach { (iconKey, vector) ->
+                    CategoryIcons.AVAILABLE_ICONS.forEach { (iconKey, vector) ->
                         val isSelected = selectedIconName == iconKey
                         Box(
                             modifier = Modifier

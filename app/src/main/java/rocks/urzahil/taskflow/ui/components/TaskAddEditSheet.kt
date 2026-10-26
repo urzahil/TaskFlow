@@ -25,8 +25,8 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Work
@@ -90,15 +90,10 @@ val CATEGORIES = listOf(
     CategoryOption("General", Icons.Default.CalendarMonth, 0xFF3B82F6),
     CategoryOption("Work", Icons.Default.Work, 0xFF2563EB),
     CategoryOption("Personal", Icons.Default.Person, 0xFF8B5CF6),
-    CategoryOption("Pets", Icons.Default.Pets, 0xFF10B981),
+    CategoryOption("Health", Icons.Default.MedicalServices, 0xFF10B981),
     CategoryOption("Fitness", Icons.Default.FitnessCenter, 0xFFF59E0B),
     CategoryOption("Home", Icons.Default.Home, 0xFF059669),
     CategoryOption("Study", Icons.Default.School, 0xFF6366F1)
-)
-
-val RECURRENCE_PRESETS = listOf(
-    1 to "Every Day",
-    7 to "Every Week"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -221,7 +216,8 @@ fun TaskAddEditSheet(
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
 
-    val categoryObj = CATEGORIES.firstOrNull { it.name == selectedCategory } ?: CATEGORIES[0]
+    // Backups reject tasks that end before they start, so never let one be saved.
+    val endsBeforeStart = isRecurring && hasEndDate && endDate < startDate
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -638,7 +634,12 @@ fun TaskAddEditSheet(
                             }
                             Switch(
                                 checked = hasEndDate,
-                                onCheckedChange = { hasEndDate = it }
+                                onCheckedChange = { enabled ->
+                                    hasEndDate = enabled
+                                    if (enabled && endDate < startDate) {
+                                        endDate = startDate.plusDays(30)
+                                    }
+                                }
                             )
                         }
 
@@ -668,6 +669,14 @@ fun TaskAddEditSheet(
                                     Icons.Default.CalendarMonth,
                                     contentDescription = "Pick End Date",
                                     tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            if (endsBeforeStart) {
+                                Text(
+                                    text = "End date must be on or after the start date",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.testTag("end_date_error")
                                 )
                             }
                         }
@@ -786,7 +795,7 @@ fun TaskAddEditSheet(
                         )
                         onSave(taskToSave)
                     },
-                    enabled = title.isNotBlank(),
+                    enabled = title.isNotBlank() && !endsBeforeStart,
                     modifier = Modifier
                         .weight(if (existingTask != null && onDelete != null) 1.8f else 1f)
                         .testTag("save_task_button"),

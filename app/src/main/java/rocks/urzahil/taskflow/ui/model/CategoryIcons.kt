@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
@@ -24,6 +25,7 @@ object CategoryIcons {
         "general" to Icons.Default.CalendarMonth,
         "work" to Icons.Default.Work,
         "personal" to Icons.Default.Person,
+        "health" to Icons.Default.MedicalServices,
         "pets" to Icons.Default.Pets,
         "fitness" to Icons.Default.FitnessCenter,
         "home" to Icons.Default.Home,
@@ -38,6 +40,8 @@ object CategoryIcons {
         "music" to Icons.Default.MusicNote,
         "flag" to Icons.Default.Flag
     )
+
+    private val ICONS_BY_NAME = AVAILABLE_ICONS.toMap()
 
     val PALETTE_COLORS = listOf(
         0xFF3B82F6, // Blue
@@ -54,47 +58,40 @@ object CategoryIcons {
         0xFF06B6D4  // Cyan
     )
 
-    fun getIcon(iconName: String): ImageVector {
-        if (iconName == "health") return Icons.Default.Pets
-        return AVAILABLE_ICONS.firstOrNull { it.first == iconName }?.second
-            ?: Icons.Default.Bookmark
-    }
+    fun getIcon(iconName: String): ImageVector = ICONS_BY_NAME[iconName] ?: Icons.Default.Bookmark
 
+    /** Keywords per icon, checked in order; the first icon with a matching word wins. */
+    private val SUGGESTIONS = listOf(
+        "fitness" to listOf("fitness", "gym", "workout", "sport", "exercise"),
+        "work" to listOf("work", "job", "office", "career"),
+        "personal" to listOf("personal", "person", "self", "me"),
+        "health" to listOf("health", "medic", "doctor", "spa"),
+        "home" to listOf("home", "house", "chore"),
+        "study" to listOf("study", "learn", "school", "book"),
+        "shopping" to listOf("shop", "buy", "grocer"),
+        "finance" to listOf("money", "financ", "bank", "bill"),
+        "travel" to listOf("travel", "trip", "flight", "vacation"),
+        "pets" to listOf("pet", "dog", "cat"),
+        "creative" to listOf("art", "design", "creat"),
+        "music" to listOf("music", "song"),
+        "flag" to listOf("urgent", "goal", "flag"),
+        "star" to listOf("star", "important"),
+        "heart" to listOf("heart", "love"),
+        "idea" to listOf("idea")
+    )
+
+    /**
+     * Picks an icon for a category name by matching whole words, so "Home" is not taken for
+     * "me" and "Education" is not taken for "cat". Keywords of three letters or fewer must match
+     * a word exactly (or its plural); longer ones match the start of a word.
+     */
     fun suggestIconForName(categoryName: String): String {
-        val lower = categoryName.lowercase().trim()
-        return when {
-            lower.contains("work") || lower.contains("job") || lower.contains("office") -> "work"
-            lower.contains("person") || lower.contains("me") || lower.contains("self") -> "personal"
-            lower.contains("health") || lower.contains("med") || lower.contains("doctor") || lower.contains(
-                "spa"
-            ) -> "health"
-
-            lower.contains("fit") || lower.contains("gym") || lower.contains("workout") || lower.contains(
-                "sport"
-            ) -> "fitness"
-
-            lower.contains("home") || lower.contains("house") || lower.contains("chores") -> "home"
-            lower.contains("study") || lower.contains("learn") || lower.contains("school") || lower.contains(
-                "book"
-            ) -> "study"
-
-            lower.contains("shop") || lower.contains("buy") || lower.contains("grocery") -> "shopping"
-            lower.contains("money") || lower.contains("finance") || lower.contains("bank") || lower.contains(
-                "bill"
-            ) -> "finance"
-
-            lower.contains("travel") || lower.contains("trip") || lower.contains("flight") || lower.contains(
-                "vacation"
-            ) -> "travel"
-
-            lower.contains("pet") || lower.contains("dog") || lower.contains("cat") -> "pets"
-            lower.contains("art") || lower.contains("design") || lower.contains("create") -> "creative"
-            lower.contains("music") || lower.contains("song") -> "music"
-            lower.contains("urgent") || lower.contains("goal") || lower.contains("flag") -> "flag"
-            lower.contains("star") || lower.contains("important") -> "star"
-            lower.contains("heart") || lower.contains("love") -> "heart"
-            lower.contains("idea") -> "idea"
-            else -> "general"
-        }
+        val words = categoryName.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
+        fun matches(word: String, keyword: String) =
+            if (keyword.length <= 3) word == keyword || word == keyword + "s"
+            else word.startsWith(keyword)
+        return SUGGESTIONS.firstOrNull { (_, keywords) ->
+            words.any { word -> keywords.any { matches(word, it) } }
+        }?.first ?: "general"
     }
 }
