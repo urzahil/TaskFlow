@@ -160,13 +160,10 @@ fun TaskAddEditSheet(
         mutableStateOf(!existingTask?.recurrenceDaysOfWeek.isNullOrBlank())
     }
     var selectedDaysOfWeek by remember {
+        val savedDays = existingTask?.parsedDaysOfWeek().orEmpty()
         mutableStateOf(
-            if (!existingTask?.recurrenceDaysOfWeek.isNullOrBlank()) {
-                existingTask?.recurrenceDaysOfWeek
-                    ?.split(",")
-                    ?.mapNotNull { it.trim().toIntOrNull() }
-                    ?.toSet()
-                    ?: emptySet()
+            if (savedDays.isNotEmpty()) {
+                savedDays
             } else {
                 setOf(
                     existingTask?.let {
@@ -338,7 +335,7 @@ fun TaskAddEditSheet(
                             )
                             Text(
                                 text = "${AppDate.dayOfWeekName(startDate.dayOfWeek())}, ${
-                                    startDate.formatEuropean(
+                                    startDate.formatLong(
                                         includeYear = true
                                     )
                                 }",
@@ -602,7 +599,7 @@ fun TaskAddEditSheet(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = startDate.formatEuropean(includeYear = true),
+                                    text = startDate.formatLong(includeYear = true),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
@@ -660,7 +657,7 @@ fun TaskAddEditSheet(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        text = endDate.formatEuropean(includeYear = true),
+                                        text = endDate.formatLong(includeYear = true),
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.SemiBold
                                     )

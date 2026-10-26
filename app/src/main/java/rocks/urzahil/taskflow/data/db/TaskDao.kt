@@ -25,9 +25,6 @@ interface TaskDao {
     @Query("SELECT * FROM task_completions")
     fun getAllCompletions(): Flow<List<TaskCompletionEntity>>
 
-    @Query("SELECT * FROM task_completions WHERE date = :date")
-    fun getCompletionsForDate(date: String): Flow<List<TaskCompletionEntity>>
-
     @Query("SELECT * FROM task_occurrence_exclusions")
     fun getAllOccurrenceExclusions(): Flow<List<TaskOccurrenceExclusionEntity>>
 
@@ -49,22 +46,13 @@ interface TaskDao {
     @Update
     suspend fun updateTask(task: TaskEntity)
 
-    @Delete
-    suspend fun deleteTask(task: TaskEntity)
-
-    @Transaction
-    suspend fun deleteTaskWithCompletions(taskId: Long) {
-        deleteCompletionsForTask(taskId)
-        deleteOccurrenceExclusionsForTask(taskId)
-        deleteTaskById(taskId)
-    }
-
     @Transaction
     suspend fun deleteOccurrence(taskId: Long, date: String) {
         insertOccurrenceExclusion(TaskOccurrenceExclusionEntity(taskId, date))
         deleteCompletion(taskId, date)
     }
 
+    /** Completions and occurrence exclusions go with the task (ON DELETE CASCADE). */
     @Query("DELETE FROM tasks WHERE id = :taskId")
     suspend fun deleteTaskById(taskId: Long)
 
@@ -74,23 +62,11 @@ interface TaskDao {
     @Query("DELETE FROM task_completions WHERE taskId = :taskId AND date = :date")
     suspend fun deleteCompletion(taskId: Long, date: String)
 
-    @Query("DELETE FROM task_completions WHERE taskId = :taskId")
-    suspend fun deleteCompletionsForTask(taskId: Long)
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOccurrenceExclusion(exclusion: TaskOccurrenceExclusionEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOccurrenceExclusions(exclusions: List<TaskOccurrenceExclusionEntity>)
-
-    @Query("DELETE FROM task_occurrence_exclusions WHERE taskId = :taskId AND date = :date")
-    suspend fun deleteOccurrenceExclusion(taskId: Long, date: String)
-
-    @Query("DELETE FROM task_occurrence_exclusions WHERE taskId = :taskId")
-    suspend fun deleteOccurrenceExclusionsForTask(taskId: Long)
-
-    @Query("DELETE FROM task_occurrence_exclusions WHERE taskId IN (:taskIds)")
-    suspend fun deleteOccurrenceExclusionsForTaskIds(taskIds: List<Long>)
 
     @Query("DELETE FROM task_occurrence_exclusions WHERE date < :todayIso")
     suspend fun deleteOccurrenceExclusionsBefore(todayIso: String)
@@ -184,23 +160,15 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE isRecurring = 1")
     suspend fun getAllRecurringTasks(): List<TaskEntity>
 
-    @Query("SELECT DISTINCT taskId FROM task_completions WHERE date < :todayIso")
-    suspend fun getPastCompletedTaskIds(todayIso: String): List<Long>
-
     @Query("SELECT * FROM task_completions")
     suspend fun getAllCompletionsList(): List<TaskCompletionEntity>
 
     @Query("DELETE FROM task_completions WHERE date < :todayIso")
     suspend fun deleteCompletionsBefore(todayIso: String)
 
-    @Query("DELETE FROM task_completions WHERE taskId NOT IN (SELECT id FROM tasks)")
-    suspend fun cleanOrphanCompletions()
-
+    /** Completions and occurrence exclusions go with the tasks (ON DELETE CASCADE). */
     @Delete
     suspend fun deleteTasks(tasks: List<TaskEntity>)
-
-    @Query("DELETE FROM task_completions WHERE taskId IN (:taskIds)")
-    suspend fun deleteCompletionsForTaskIds(taskIds: List<Long>)
 
     @Query("UPDATE tasks SET startDate = :newStartDate WHERE id = :taskId")
     suspend fun updateTaskStartDate(taskId: Long, newStartDate: String)
@@ -209,7 +177,6 @@ interface TaskDao {
     suspend fun performCleanupAndRolloverBatch(
         tasksToDelete: List<TaskEntity>,
         tasksToUpdate: List<TaskEntity>,
-        taskIdsForCompletionDeletion: List<Long>,
         todayIso: String
     ) {
         // Re-check completed one-off tasks inside the same transaction that applies the
@@ -218,14 +185,8 @@ interface TaskDao {
         val completedNonRecurringTasks = getCompletedNonRecurringTasks()
         val effectiveTasksToDelete =
             (tasksToDelete + completedNonRecurringTasks).distinctBy { it.id }
-        val effectiveTaskIdsForCompletionDeletion =
-            (taskIdsForCompletionDeletion + completedNonRecurringTasks.map { it.id }).distinct()
         val deletedTaskIds = effectiveTasksToDelete.map { it.id }.toSet()
 
-        if (effectiveTaskIdsForCompletionDeletion.isNotEmpty()) {
-            deleteCompletionsForTaskIds(effectiveTaskIdsForCompletionDeletion)
-            deleteOccurrenceExclusionsForTaskIds(effectiveTaskIdsForCompletionDeletion)
-        }
         if (effectiveTasksToDelete.isNotEmpty()) {
             deleteTasks(effectiveTasksToDelete)
         }
@@ -237,17 +198,11 @@ interface TaskDao {
         }
         deleteCompletionsBefore(todayIso)
         deleteOccurrenceExclusionsBefore(todayIso)
-        cleanOrphanCompletions()
     }
 
+    /** Completions and occurrence exclusions go with the tasks (ON DELETE CASCADE). */
     @Query("DELETE FROM tasks")
     suspend fun deleteAllTasks()
-
-    @Query("DELETE FROM task_completions")
-    suspend fun deleteAllCompletions()
-
-    @Query("DELETE FROM task_occurrence_exclusions")
-    suspend fun deleteAllOccurrenceExclusions()
 
     @Query("DELETE FROM categories")
     suspend fun deleteAllCategories()
@@ -260,8 +215,6 @@ interface TaskDao {
         occurrenceExclusions: List<TaskOccurrenceExclusionEntity> = emptyList()
     ) {
         deleteAllTasks()
-        deleteAllCompletions()
-        deleteAllOccurrenceExclusions()
         deleteAllCategories()
         if (categories.isNotEmpty()) {
             insertCategories(categories)

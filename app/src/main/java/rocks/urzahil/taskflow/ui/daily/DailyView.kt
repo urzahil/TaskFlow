@@ -166,7 +166,7 @@ fun DailyView(
                                 }
                             }
                             Text(
-                                text = selectedDate.formatEuropean(includeYear = true),
+                                text = selectedDate.formatLong(includeYear = true),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -397,7 +397,7 @@ fun DailyView(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                TaskFilter.values().forEach { filter ->
+                TaskFilter.entries.forEach { filter ->
                     FilterChip(
                         selected = currentFilter == filter,
                         onClick = { onFilterChange(filter) },
@@ -729,7 +729,7 @@ fun TaskCardItem(
                 text = {
                     Text(
                         "This will remove ${task.title} from ${
-                            taskItem.date.formatEuropean(
+                            taskItem.date.formatLong(
                                 includeYear = true
                             )
                         } only. The recurring task will continue on its other scheduled dates."
@@ -750,10 +750,8 @@ fun TaskCardItem(
 }
 
 private fun formatRecurrenceLabel(task: TaskEntity): String {
-    if (!task.recurrenceDaysOfWeek.isNullOrBlank()) {
-        val days = task.recurrenceDaysOfWeek.split(",")
-            .mapNotNull { it.trim().toIntOrNull() }
-            .sorted()
+    val days = task.parsedDaysOfWeek().sorted()
+    if (days.isNotEmpty()) {
         return when {
             days.size == 7 -> "Daily"
             days == listOf(1, 2, 3, 4, 5) -> "Weekdays"

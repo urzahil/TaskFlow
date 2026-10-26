@@ -21,9 +21,7 @@ import java.util.concurrent.TimeUnit
 
 data class DriveBackupInfo(
     val fileId: String,
-    val modifiedTime: String,
-    val taskCount: Int,
-    val timestamp: Long
+    val modifiedTime: String
 )
 
 class GoogleDriveService(private val context: Context) {
@@ -107,9 +105,7 @@ class GoogleDriveService(private val context: Context) {
                     val modified = fileObj.optString("modifiedTime", "")
                     return@withContext DriveBackupInfo(
                         fileId = id,
-                        modifiedTime = modified,
-                        taskCount = 0,
-                        timestamp = System.currentTimeMillis()
+                        modifiedTime = modified
                     )
                 }
             }
@@ -152,9 +148,7 @@ class GoogleDriveService(private val context: Context) {
                         Result.success(
                             DriveBackupInfo(
                                 fileId = id,
-                                modifiedTime = json.optString("modifiedTime", ""),
-                                taskCount = countTasks(tasksJson),
-                                timestamp = System.currentTimeMillis()
+                                modifiedTime = json.optString("modifiedTime", "")
                             )
                         )
                     }
@@ -198,9 +192,7 @@ class GoogleDriveService(private val context: Context) {
                         Result.success(
                             DriveBackupInfo(
                                 fileId = id,
-                                modifiedTime = json.optString("modifiedTime", ""),
-                                taskCount = countTasks(tasksJson),
-                                timestamp = System.currentTimeMillis()
+                                modifiedTime = json.optString("modifiedTime", "")
                             )
                         )
                     }
@@ -242,15 +234,6 @@ class GoogleDriveService(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Error downloading backup: ${e.message}", e)
             Result.failure(e)
-        }
-    }
-
-    private fun countTasks(jsonStr: String): Int {
-        return try {
-            val root = JSONObject(jsonStr)
-            root.optJSONArray("tasks")?.length() ?: 0
-        } catch (_: Exception) {
-            0
         }
     }
 }

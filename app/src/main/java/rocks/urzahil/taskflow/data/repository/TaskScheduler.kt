@@ -26,12 +26,10 @@ object TaskScheduler {
 
         val tasksToDelete = mutableListOf<TaskEntity>()
         val tasksToUpdate = mutableListOf<TaskEntity>()
-        val taskIdsForCompletionDeletion = mutableListOf<Long>()
 
         // A completed non-recurring task is finished regardless of its scheduled date.
         for (task in completedNonRecurringTasks) {
             tasksToDelete.add(task)
-            taskIdsForCompletionDeletion.add(task.id)
             cleanedCount++
         }
 
@@ -84,7 +82,6 @@ object TaskScheduler {
                 }
                 if (expiredEnd != null && expiredEnd < today) {
                     tasksToDelete.add(task)
-                    taskIdsForCompletionDeletion.add(task.id)
                     cleanedCount++
                     continue
                 }
@@ -120,7 +117,6 @@ object TaskScheduler {
                     }
                     if (expiredEnd != null && nextOccurrence > expiredEnd) {
                         tasksToDelete.add(task)
-                        taskIdsForCompletionDeletion.add(task.id)
                         cleanedCount++
                         continue
                     }
@@ -154,7 +150,6 @@ object TaskScheduler {
         taskDao.performCleanupAndRolloverBatch(
             tasksToDelete = tasksToDelete,
             tasksToUpdate = tasksToUpdate,
-            taskIdsForCompletionDeletion = taskIdsForCompletionDeletion,
             todayIso = todayIso
         )
 

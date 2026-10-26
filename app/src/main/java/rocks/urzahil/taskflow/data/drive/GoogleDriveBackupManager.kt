@@ -214,7 +214,7 @@ open class GoogleDriveBackupManager(
                     description = obj.optString("description", ""),
                     category = obj.optString("category", "General"),
                     priority = obj.optString("priority", "Medium"),
-                    colorHex = obj.optLong("colorHex", 0xFF6750A4),
+                    colorHex = obj.optLong("colorHex", 0xFF3B82F6),
                     isRecurring = obj.optBoolean("isRecurring", false),
                     recurrenceDays = obj.optInt("recurrenceDays", 1),
                     recurrenceDaysOfWeek = sanitizedDaysOfWeek,
@@ -236,6 +236,7 @@ open class GoogleDriveBackupManager(
             }
         }
 
+        val recurringTaskIds = tasks.filter { it.isRecurring }.mapTo(HashSet()) { it.id }
         val exclusions = mutableListOf<TaskOccurrenceExclusionEntity>()
         val exclusionsArray = root.optJSONArray("recurringTaskExclusions")
         if (exclusionsArray != null) {
@@ -249,7 +250,7 @@ open class GoogleDriveBackupManager(
                 require(
                     AppDate.parseIso(exclusion.date).toIsoString() == exclusion.date
                 ) { "Invalid occurrence exclusion date" }
-                require(tasks.first { it.id == exclusion.taskId }.isRecurring) { "Occurrence exclusion refers to a non-recurring task" }
+                require(exclusion.taskId in recurringTaskIds) { "Occurrence exclusion refers to a non-recurring task" }
                 exclusions.add(exclusion)
             }
         }

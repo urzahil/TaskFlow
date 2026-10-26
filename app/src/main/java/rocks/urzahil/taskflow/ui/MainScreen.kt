@@ -199,12 +199,12 @@ fun MainScreen(
     }
 
     // Handle back gestures / system back button
-    BackHandler(enabled = isSearchActive) {
+    BackHandler(enabled = isSearchActive && viewMode != ViewMode.SETTINGS) {
         isSearchActive = false
         viewModel.setSearchQuery("")
     }
 
-    PredictiveBackHandler(enabled = !isSearchActive && viewMode == ViewMode.SETTINGS) { progress ->
+    PredictiveBackHandler(enabled = viewMode == ViewMode.SETTINGS) { progress ->
         try {
             progress.collect { }
             viewModel.closeSettings()
@@ -463,12 +463,8 @@ fun MainScreen(
                         onSelectDate = { viewModel.selectDate(it) },
                         onPrevMonth = { viewModel.prevMonth() },
                         onNextMonth = { viewModel.nextMonth() },
-                        onJumpToCurrentMonth = { viewModel.jumpToCurrentMonth() },
                         onToggleTask = { viewModel.toggleTaskCompletion(it) },
-                        onEditTask = { viewModel.openEditTaskDialog(it) },
-                        onDeleteTask = { viewModel.deleteTask(it) },
                         onSwitchToDailyView = { viewModel.setViewMode(ViewMode.DAILY) },
-                        onAddTaskForDay = { viewModel.openAddTaskDialog() },
                         currentToday = currentToday,
                         showMonthlyTaskList = showMonthlyTaskList
                     )
@@ -484,7 +480,6 @@ fun MainScreen(
                 ViewMode.SETTINGS -> {
                     SettingsScreen(
                         categories = categories,
-                        onBack = { viewModel.closeSettings() },
                         onAddCategory = { name, colorHex, iconName ->
                             viewModel.addCategory(name, colorHex, iconName)
                         },

@@ -17,9 +17,6 @@ class TaskRepository(private val taskDao: TaskDao) {
         taskDao.getAllOccurrenceExclusions()
     val allCategories: Flow<List<CategoryEntity>> = taskDao.getAllCategories()
 
-    fun getCompletionsForDate(dateIso: String): Flow<List<TaskCompletionEntity>> =
-        taskDao.getCompletionsForDate(dateIso)
-
     suspend fun insertTask(task: TaskEntity): Long = taskDao.insertTask(task)
 
     suspend fun insertTasks(tasks: List<TaskEntity>) = taskDao.insertTasks(tasks)
@@ -31,13 +28,7 @@ class TaskRepository(private val taskDao: TaskDao) {
 
     suspend fun updateTask(task: TaskEntity) = taskDao.updateTask(task)
 
-    suspend fun deleteTask(task: TaskEntity) {
-        taskDao.deleteTaskWithCompletions(task.id)
-    }
-
-    suspend fun deleteTaskById(taskId: Long) {
-        taskDao.deleteTaskWithCompletions(taskId)
-    }
+    suspend fun deleteTask(task: TaskEntity) = taskDao.deleteTaskById(task.id)
 
     suspend fun deleteRecurringOccurrence(taskId: Long, dateIso: String) {
         taskDao.deleteOccurrence(taskId, dateIso)

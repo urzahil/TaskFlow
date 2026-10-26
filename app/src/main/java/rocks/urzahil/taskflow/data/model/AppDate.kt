@@ -71,9 +71,9 @@ data class AppDate(
     /**
      * Localized long date, e.g. "16 October 2026" (en-GB), "October 16, 2026" (en-US) or
      * "16. Oktober 2026" (de). Without the year only day and month are shown, in the order
-     * the locale uses. (Name kept for existing callers; the output is no longer European-only.)
+     * the locale uses.
      */
-    fun formatEuropean(includeYear: Boolean = true, locale: Locale = Locale.getDefault()): String {
+    fun formatLong(includeYear: Boolean = true, locale: Locale = Locale.getDefault()): String {
         if (includeYear) {
             return DateFormat.getDateInstance(DateFormat.LONG, locale).format(toJavaDate())
         }
@@ -81,7 +81,7 @@ data class AppDate(
     }
 
     /** Localized date with an abbreviated month, e.g. "16 Oct 2026" or "Oct 16, 2026". */
-    fun formatEuropeanShort(
+    fun formatShort(
         includeYear: Boolean = true,
         locale: Locale = Locale.getDefault()
     ): String {
