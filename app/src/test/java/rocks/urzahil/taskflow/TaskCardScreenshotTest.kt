@@ -6,7 +6,7 @@ import rocks.urzahil.taskflow.data.model.AppDate
 import rocks.urzahil.taskflow.data.model.TaskEntity
 import rocks.urzahil.taskflow.ui.daily.TaskCardItem
 import rocks.urzahil.taskflow.ui.model.TaskItemUi
-import rocks.urzahil.taskflow.ui.theme.MyApplicationTheme
+import rocks.urzahil.taskflow.ui.theme.TaskFlowTheme
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -19,7 +19,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = RobolectricDeviceQualifiers.Pixel8, sdk = [35])
-class GreetingScreenshotTest {
+class TaskCardScreenshotTest {
 
     @get:Rule
     val composeTestRule = createComposeRule()
@@ -43,7 +43,7 @@ class GreetingScreenshotTest {
         )
 
         composeTestRule.setContent {
-            MyApplicationTheme {
+            TaskFlowTheme {
                 TaskCardItem(
                     taskItem = taskItem,
                     onToggle = {},
@@ -53,6 +53,6 @@ class GreetingScreenshotTest {
             }
         }
 
-        composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/greeting.png")
+        composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/task_card.png")
     }
 }
