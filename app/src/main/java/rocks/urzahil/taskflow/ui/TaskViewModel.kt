@@ -1,9 +1,13 @@
 package rocks.urzahil.taskflow.ui
 
+import android.app.Activity
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import rocks.urzahil.taskflow.data.drive.DriveConnectStep
 import rocks.urzahil.taskflow.data.drive.GoogleDriveBackupManager
 import rocks.urzahil.taskflow.data.db.CategoryNameConflictException
 import rocks.urzahil.taskflow.data.db.LastDefaultCategoryException
@@ -19,16 +23,21 @@ import rocks.urzahil.taskflow.ui.model.DayTasksGroupUi
 import rocks.urzahil.taskflow.ui.model.TaskFilter
 import rocks.urzahil.taskflow.ui.model.TaskItemUi
 import rocks.urzahil.taskflow.ui.model.ViewMode
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -74,9 +83,10 @@ class TaskViewModel(
         private const val KEY_SHOW_MONTHLY_TASK_LIST = "show_monthly_task_list"
         private const val KEY_SHOW_MONTHLY_VIEW = "show_monthly_view"
         private const val KEY_SHOW_LIST_VIEW = "show_list_view"
-        private const val KEY_HIDE_MONTHLY_TASK_LIST = "hide_monthly_task_list"
-        private const val KEY_HIDE_MONTHLY_VIEW = "hide_monthly_view"
-        private const val KEY_HIDE_LIST_VIEW = "hide_list_view"
+        // Older builds stored inverted "hide_*" flags; they are read only when no "show_*" value exists.
+        private const val KEY_LEGACY_HIDE_MONTHLY_TASK_LIST = "hide_monthly_task_list"
+        private const val KEY_LEGACY_HIDE_MONTHLY_VIEW = "hide_monthly_view"
+        private const val KEY_LEGACY_HIDE_LIST_VIEW = "hide_list_view"
         private const val KEY_ROLLOVER_CLEANUP_ENABLED = "rollover_cleanup_enabled"
         private const val KEY_LAST_ROLLOVER_DATE = "last_rollover_date"
         private const val KEY_LAST_ROLLOVER_TIMESTAMP = "last_rollover_timestamp"
@@ -108,70 +118,46 @@ class TaskViewModel(
         userPrefs?.edit()?.putBoolean(KEY_USE_DYNAMIC_COLORS, enabled)?.apply()
     }
 
+    private fun readShowPreference(showKey: String, legacyHideKey: String): Boolean {
+        val prefs = userPrefs ?: return true
+        return when {
+            prefs.contains(showKey) -> prefs.getBoolean(showKey, true)
+            prefs.contains(legacyHideKey) -> !prefs.getBoolean(legacyHideKey, false)
+            else -> true
+        }
+    }
+
     private val _showMonthlyTaskList = MutableStateFlow(
-        userPrefs?.let {
-            if (it.contains(KEY_SHOW_MONTHLY_TASK_LIST)) {
-                it.getBoolean(KEY_SHOW_MONTHLY_TASK_LIST, true)
-            } else if (it.contains(KEY_HIDE_MONTHLY_TASK_LIST)) {
-                !it.getBoolean(KEY_HIDE_MONTHLY_TASK_LIST, false)
-            } else {
-                true
-            }
-        } ?: true
+        readShowPreference(KEY_SHOW_MONTHLY_TASK_LIST, KEY_LEGACY_HIDE_MONTHLY_TASK_LIST)
     )
     val showMonthlyTaskList: StateFlow<Boolean> = _showMonthlyTaskList.asStateFlow()
 
     fun setShowMonthlyTaskList(show: Boolean) {
         _showMonthlyTaskList.value = show
-        userPrefs?.edit()
-            ?.putBoolean(KEY_SHOW_MONTHLY_TASK_LIST, show)
-            ?.putBoolean(KEY_HIDE_MONTHLY_TASK_LIST, !show)
-            ?.apply()
+        userPrefs?.edit()?.putBoolean(KEY_SHOW_MONTHLY_TASK_LIST, show)?.apply()
     }
 
     private val _showMonthlyView = MutableStateFlow(
-        userPrefs?.let {
-            if (it.contains(KEY_SHOW_MONTHLY_VIEW)) {
-                it.getBoolean(KEY_SHOW_MONTHLY_VIEW, true)
-            } else if (it.contains(KEY_HIDE_MONTHLY_VIEW)) {
-                !it.getBoolean(KEY_HIDE_MONTHLY_VIEW, false)
-            } else {
-                true
-            }
-        } ?: true
+        readShowPreference(KEY_SHOW_MONTHLY_VIEW, KEY_LEGACY_HIDE_MONTHLY_VIEW)
     )
     val showMonthlyView: StateFlow<Boolean> = _showMonthlyView.asStateFlow()
 
     fun setShowMonthlyView(show: Boolean) {
         _showMonthlyView.value = show
-        userPrefs?.edit()
-            ?.putBoolean(KEY_SHOW_MONTHLY_VIEW, show)
-            ?.putBoolean(KEY_HIDE_MONTHLY_VIEW, !show)
-            ?.apply()
+        userPrefs?.edit()?.putBoolean(KEY_SHOW_MONTHLY_VIEW, show)?.apply()
         if (!show && _viewMode.value == ViewMode.MONTHLY) {
             _viewMode.value = ViewMode.DAILY
         }
     }
 
     private val _showListView = MutableStateFlow(
-        userPrefs?.let {
-            if (it.contains(KEY_SHOW_LIST_VIEW)) {
-                it.getBoolean(KEY_SHOW_LIST_VIEW, true)
-            } else if (it.contains(KEY_HIDE_LIST_VIEW)) {
-                !it.getBoolean(KEY_HIDE_LIST_VIEW, false)
-            } else {
-                true
-            }
-        } ?: true
+        readShowPreference(KEY_SHOW_LIST_VIEW, KEY_LEGACY_HIDE_LIST_VIEW)
     )
     val showListView: StateFlow<Boolean> = _showListView.asStateFlow()
 
     fun setShowListView(show: Boolean) {
         _showListView.value = show
-        userPrefs?.edit()
-            ?.putBoolean(KEY_SHOW_LIST_VIEW, show)
-            ?.putBoolean(KEY_HIDE_LIST_VIEW, !show)
-            ?.apply()
+        userPrefs?.edit()?.putBoolean(KEY_SHOW_LIST_VIEW, show)?.apply()
         if (!show && _viewMode.value == ViewMode.LIST) {
             _viewMode.value = ViewMode.DAILY
         }
@@ -282,8 +268,8 @@ class TaskViewModel(
 
     private val _driveSyncState = MutableStateFlow(
         DriveSyncState(
-            isSignedIn = driveBackupManager.getSignedInAccount() != null,
-            userEmail = driveBackupManager.getSignedInAccount()?.email,
+            isSignedIn = driveBackupManager.isDriveConnected(),
+            userEmail = driveBackupManager.getConnectedAccountEmail(),
             lastBackupTimeFormatted = driveBackupManager.getLastBackupTimeFormatted(),
             lastBackupCount = driveBackupManager.getLastBackupCount(),
             lastBackupCategoriesCount = driveBackupManager.getLastBackupCategoriesCount(),
@@ -306,10 +292,11 @@ class TaskViewModel(
 
     init {
         viewModelScope.launch {
-            val currentCategories = repository.allCategories.first()
-            if (currentCategories.isEmpty()) {
-                repository.seedInitialCategoriesIfEmpty()
-            }
+            // First, so the starter categories are there before anything else can be slow.
+            repository.seedInitialCategoriesIfEmpty()
+
+            // Keep users connected across the move off the removed GoogleSignIn API.
+            driveBackupManager.migrateLegacySignIn()
 
             // On app installation: auto-restore from Google Drive if a backup exists
             val restoredResult = driveBackupManager.checkAndAutoRestoreOnInstall()
@@ -328,7 +315,7 @@ class TaskViewModel(
             // Resume any backup that was durably marked pending before the process was killed or the last attempt failed.
             if (driveBackupManager.isBackupPendingDurable() &&
                 driveBackupManager.isAutoBackupEnabled() &&
-                driveBackupManager.getSignedInAccount() != null
+                driveBackupManager.isDriveConnected()
             ) {
                 isAutoBackupPending = true
                 autoBackupChannel.trySend(Unit)
@@ -366,7 +353,7 @@ class TaskViewModel(
         // Retry any durable backup that is still pending when the app returns to the foreground.
         if (driveBackupManager.isBackupPendingDurable() &&
             driveBackupManager.isAutoBackupEnabled() &&
-            driveBackupManager.getSignedInAccount() != null
+            driveBackupManager.isDriveConnected()
         ) {
             isAutoBackupPending = true
             autoBackupChannel.trySend(Unit)
@@ -439,78 +426,77 @@ class TaskViewModel(
         }
     }
 
-    /** Tasks scheduled on [date], minus individually deleted occurrences, with completion state. */
-    private fun tasksOnDate(
+    /**
+     * Tasks, completions and exclusions as of the latest database change, with every task's
+     * recurrence rules parsed once. All task lists and summaries below derive from this, so a
+     * change costs three queries and one parse instead of one per list.
+     */
+    private class ScheduleSnapshot(
         tasks: List<TaskEntity>,
         completions: List<TaskCompletionEntity>,
-        exclusions: OccurrenceExclusions,
-        date: AppDate
-    ): List<TaskItemUi> {
-        val dateIso = date.toIsoString()
-        val completedTaskIds = completions
-            .asSequence()
-            .filter { it.date == dateIso }
-            .map { it.taskId }
-            .toSet()
-        return tasks
-            .filter { task ->
-                repository.isTaskScheduledOnDate(task, date) && !exclusions.contains(task.id, dateIso)
+        private val exclusions: OccurrenceExclusions
+    ) {
+        /** Tasks in display order with their schedules; tasks with an unparseable start are never shown. */
+        private val scheduled: List<Pair<TaskEntity, TaskSchedule>> =
+            tasks.mapNotNull { task -> TaskSchedule.from(task)?.let { task to it } }
+        private val completedIdsByDate: Map<String, Set<Long>> =
+            completions.groupBy({ it.date }, { it.taskId }).mapValues { (_, ids) -> ids.toHashSet() }
+
+        private fun scheduledOn(date: AppDate, dateIso: String) = scheduled.filter { (_, schedule) ->
+            schedule.isScheduledOn(date) && !exclusions.contains(schedule.taskId, dateIso)
+        }
+
+        /** Tasks scheduled on [date], minus individually deleted occurrences, with completion state. */
+        fun tasksOn(date: AppDate): List<TaskItemUi> {
+            val dateIso = date.toIsoString()
+            val completedIds = completedIdsByDate[dateIso].orEmpty()
+            return scheduledOn(date, dateIso).map { (task, _) ->
+                TaskItemUi(task = task, date = date, isCompleted = task.id in completedIds)
             }
-            .map { task ->
-                TaskItemUi(task = task, date = date, isCompleted = task.id in completedTaskIds)
+        }
+
+        /** Per-day summaries for [dates], leaving out days with nothing scheduled. */
+        fun summarize(dates: List<AppDate>): Map<String, DaySummaryUi> {
+            val summaryMap = mutableMapOf<String, DaySummaryUi>()
+            for (date in dates) {
+                val dateIso = date.toIsoString()
+                val scheduledSchedules = scheduledOn(date, dateIso)
+                if (scheduledSchedules.isEmpty()) continue
+                val completedIds = completedIdsByDate[dateIso].orEmpty()
+                summaryMap[dateIso] = DaySummaryUi(
+                    date = date,
+                    totalTasks = scheduledSchedules.size,
+                    completedTasks = scheduledSchedules.count { (task, _) -> task.id in completedIds },
+                    taskColors = scheduledSchedules.take(3).map { (_, schedule) -> schedule.colorHex }
+                )
             }
+            return summaryMap
+        }
     }
+
+    private val snapshot = combine(
+        repository.allTasks,
+        repository.allCompletions,
+        repository.allOccurrenceExclusions
+    ) { tasks, completions, exclusions ->
+        ScheduleSnapshot(tasks, completions, OccurrenceExclusions(exclusions))
+    }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(5000), replay = 1)
 
     private fun TaskItemUi.matches(query: String): Boolean =
         task.title.contains(query, ignoreCase = true) ||
                 task.description.contains(query, ignoreCase = true) ||
                 task.category.contains(query, ignoreCase = true)
 
-    /** Builds the per-day summaries for [dates] from schedules that were parsed once. */
-    private fun summarizeDays(
-        tasks: List<TaskEntity>,
-        completions: List<TaskCompletionEntity>,
-        exclusions: OccurrenceExclusions,
-        dates: List<AppDate>
-    ): Map<String, DaySummaryUi> {
-        val schedules = tasks.mapNotNull { TaskSchedule.from(it) }
-        val completionsByDate = completions.groupBy { it.date }
-        val summaryMap = mutableMapOf<String, DaySummaryUi>()
-        for (date in dates) {
-            val dateIso = date.toIsoString()
-            val completedIds: Set<Long> =
-                completionsByDate[dateIso]?.mapTo(HashSet()) { it.taskId } ?: emptySet()
-            val scheduled = schedules.filter {
-                it.isScheduledOn(date) && !exclusions.contains(it.taskId, dateIso)
-            }
-            if (scheduled.isNotEmpty()) {
-                summaryMap[dateIso] = DaySummaryUi(
-                    date = date,
-                    totalTasks = scheduled.size,
-                    completedTasks = scheduled.count { it.taskId in completedIds },
-                    taskColors = scheduled.take(3).map { it.colorHex }
-                )
-            }
-        }
-        return summaryMap
-    }
-
     /**
      * Tasks for the currently selected date.
      */
     val dailyTasks: StateFlow<List<TaskItemUi>> = combine(
-        combine(
-            repository.allTasks,
-            repository.allCompletions,
-            repository.allOccurrenceExclusions
-        ) { tasks, completions, exclusions ->
-            Triple(tasks, completions, OccurrenceExclusions(exclusions))
-        },
+        snapshot,
         _selectedDate,
         _taskFilter,
         _searchQuery
-    ) { (tasks, completions, exclusions), date, filter, query ->
-        val items = tasksOnDate(tasks, completions, exclusions, date)
+    ) { snap, date, filter, query ->
+        val items = snap.tasksOn(date)
         val queryFiltered = if (query.isBlank()) items else items.filter { it.matches(query) }
         when (filter) {
             TaskFilter.ALL -> queryFiltered
@@ -528,12 +514,10 @@ class TaskViewModel(
      * for the selected date regardless of the completion filter (All, pending, done) on the daily page.
      */
     val monthlySelectedDayTasks: StateFlow<List<TaskItemUi>> = combine(
-        repository.allTasks,
-        repository.allCompletions,
-        repository.allOccurrenceExclusions,
+        snapshot,
         _selectedDate
-    ) { tasks, completions, exclusions, date ->
-        tasksOnDate(tasks, completions, OccurrenceExclusions(exclusions), date)
+    ) { snap, date ->
+        snap.tasksOn(date)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -544,16 +528,13 @@ class TaskViewModel(
      * Tasks for the next 7 days (today and 6 more) for the 7-day List view.
      */
     val next7DaysTasks: StateFlow<List<DayTasksGroupUi>> = combine(
-        repository.allTasks,
-        repository.allCompletions,
-        repository.allOccurrenceExclusions,
+        snapshot,
         _currentToday,
         _searchQuery
-    ) { tasks, completions, exclusionList, today, query ->
-        val exclusions = OccurrenceExclusions(exclusionList)
+    ) { snap, today, query ->
         (0L..6L).map { offset ->
             val date = today.plusDays(offset)
-            val items = tasksOnDate(tasks, completions, exclusions, date)
+            val items = snap.tasksOn(date)
             DayTasksGroupUi(
                 date = date,
                 dayName = AppDate.dayOfWeekName(date.dayOfWeek()),
@@ -567,44 +548,28 @@ class TaskViewModel(
     )
 
     /**
-     * Statistics for the currently selected date (total, completed). Kept aligned with
-     * dailyTasks: individually deleted recurring occurrences do not count.
+     * Statistics for the currently selected date (total, completed). Derived from the unfiltered
+     * day list, so individually deleted recurring occurrences do not count.
      */
-    val dailyStats: StateFlow<DailyStats> = combine(
-        repository.allTasks,
-        repository.allCompletions,
-        repository.allOccurrenceExclusions,
-        _selectedDate
-    ) { tasks, completions, exclusions, date ->
-        val items = tasksOnDate(tasks, completions, OccurrenceExclusions(exclusions), date)
-        DailyStats(total = items.size, completed = items.count { it.isCompleted })
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = DailyStats()
-    )
+    val dailyStats: StateFlow<DailyStats> = monthlySelectedDayTasks
+        .map { items -> DailyStats(total = items.size, completed = items.count { it.isCompleted }) }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = DailyStats()
+        )
 
     /**
      * Map of Date ISO string to DaySummaryUi for all days in the currently selected month.
-     * Highlighting days with something scheduled!
      */
     val monthDaysSummary: StateFlow<Map<String, DaySummaryUi>> = combine(
-        repository.allTasks,
-        repository.allCompletions,
-        repository.allOccurrenceExclusions,
-        _selectedYearMonth,
-        _viewMode
-    ) { tasks, completions, exclusions, (year, month), currentViewMode ->
-        // Avoid month-summary work when the monthly view is not active
-        if (currentViewMode != ViewMode.MONTHLY) {
-            emptyMap()
-        } else {
-            val days = (1..AppDate.daysInMonth(year, month)).map { AppDate(year, month, it) }
-            summarizeDays(tasks, completions, OccurrenceExclusions(exclusions), days)
-        }
+        snapshot,
+        _selectedYearMonth
+    ) { snap, (year, month) ->
+        snap.summarize((1..AppDate.daysInMonth(year, month)).map { AppDate(year, month, it) })
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.Eagerly,
+        started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyMap()
     )
 
@@ -612,16 +577,13 @@ class TaskViewModel(
      * Map of Date ISO string to DaySummaryUi for the 7 days visible in the Daily view's week list strip.
      */
     val weekDaysSummary: StateFlow<Map<String, DaySummaryUi>> = combine(
-        repository.allTasks,
-        repository.allCompletions,
-        repository.allOccurrenceExclusions,
+        snapshot,
         _selectedDate
-    ) { tasks, completions, exclusions, selectedDate ->
-        val stripDays = (-3..3).map { selectedDate.plusDays(it.toLong()) }
-        summarizeDays(tasks, completions, OccurrenceExclusions(exclusions), stripDays)
+    ) { snap, selectedDate ->
+        snap.summarize((-3..3).map { selectedDate.plusDays(it.toLong()) })
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.Eagerly,
+        started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyMap()
     )
 
@@ -804,7 +766,7 @@ class TaskViewModel(
 
     fun triggerAutoBackup(debounceMs: Long = DEFAULT_AUTO_BACKUP_DEBOUNCE_MS) {
         if (!driveBackupManager.isAutoBackupEnabled()) return
-        if (driveBackupManager.getSignedInAccount() == null) return
+        if (!driveBackupManager.isDriveConnected()) return
 
         // Stay quiet (but remember the change) until the user resolves a Drive/local conflict.
         if (driveBackupManager.isSyncConflictPending()) {
@@ -836,7 +798,7 @@ class TaskViewModel(
             while (isAutoBackupPending) {
                 isAutoBackupPending = false
                 if (driveBackupManager.isSyncConflictPending()) break
-                if (!driveBackupManager.isAutoBackupEnabled() || driveBackupManager.getSignedInAccount() == null) {
+                if (!driveBackupManager.isAutoBackupEnabled() || !driveBackupManager.isDriveConnected()) {
                     if (!driveBackupManager.isAutoBackupEnabled()) {
                         driveBackupManager.setBackupPendingDurable(false)
                     }
@@ -868,10 +830,10 @@ class TaskViewModel(
     }
 
     fun refreshDriveState(message: String? = null, isError: Boolean = false) {
-        val account = driveBackupManager.getSignedInAccount()
+        val accountEmail = driveBackupManager.getConnectedAccountEmail()
         _driveSyncState.value = DriveSyncState(
-            isSignedIn = account != null,
-            userEmail = account?.email,
+            isSignedIn = accountEmail != null,
+            userEmail = accountEmail,
             isSyncing = false,
             lastBackupTimeFormatted = driveBackupManager.getLastBackupTimeFormatted(),
             lastBackupCount = driveBackupManager.getLastBackupCount(),
@@ -942,8 +904,59 @@ class TaskViewModel(
         refreshDriveState()
     }
 
-    fun onGoogleSignInSuccess(account: GoogleSignInAccount) {
-        refreshDriveState(message = "Connected to Google Drive as ${account.email}")
+    /** Consent screens for Drive access, for the UI to launch; results go to [onDriveConsentResult]. */
+    private val _driveConsentRequests = Channel<PendingIntent>(Channel.CONFLATED)
+    val driveConsentRequests: Flow<PendingIntent> = _driveConsentRequests.receiveAsFlow()
+
+    /** Connects Google Drive, asking the UI to show Google's consent screen when needed. */
+    fun connectGoogleDrive() {
+        viewModelScope.launch {
+            _driveSyncState.value = _driveSyncState.value.copy(isSyncing = true, syncMessage = null)
+            try {
+                when (val step = driveBackupManager.connect()) {
+                    is DriveConnectStep.Connected -> onDriveConnected(step.accountEmail)
+                    is DriveConnectStep.NeedsUserConsent -> {
+                        refreshDriveState()
+                        _driveConsentRequests.send(step.pendingIntent)
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onDriveConnectFailed(e)
+            }
+        }
+    }
+
+    /** Handles the result of the consent screen requested through [driveConsentRequests]. */
+    fun onDriveConsentResult(resultCode: Int, data: Intent?) {
+        if (resultCode != Activity.RESULT_OK) {
+            refreshDriveState("Google Drive was not connected", isError = true)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                onDriveConnected(driveBackupManager.completeConnect(data))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onDriveConnectFailed(e)
+            }
+        }
+    }
+
+    private fun onDriveConnectFailed(e: Exception) {
+        if ((e as? ApiException)?.statusCode == CommonStatusCodes.DEVELOPER_ERROR) {
+            // The app's signing key is not registered with an OAuth client (sign-in error 10).
+            setShowGoogleError10Dialog(true)
+            refreshDriveState("Google sign-in error 10: OAuth client setup required", isError = true)
+        } else {
+            refreshDriveState("Could not connect Google Drive: ${e.message}", isError = true)
+        }
+    }
+
+    private fun onDriveConnected(accountEmail: String) {
+        refreshDriveState(message = "Connected to Google Drive as $accountEmail")
         // Check if fresh tasks can be auto-restored
         viewModelScope.launch {
             val currentTasks = repository.allTasks.first()
@@ -955,14 +968,14 @@ class TaskViewModel(
                 if (res != null && (res.taskCount > 0 || res.categoryCount > 0)) {
                     onLocalDataReplaced()
                     refreshDriveState(
-                        message = "Connected as ${account.email} and restored ${res.taskCount} tasks & ${res.categoryCount} categories from Drive! 🎉",
+                        message = "Connected as $accountEmail and restored ${res.taskCount} tasks & ${res.categoryCount} categories from Drive! 🎉",
                         isError = false
                     )
                 }
             } else if (driveBackupManager.detectSyncConflict()) {
                 // Both this device and Drive hold data: ask before anything is overwritten.
                 refreshDriveState(
-                    message = "Connected as ${account.email}. Drive already has a backup, so automatic backup is paused until you choose which data to keep.",
+                    message = "Connected as $accountEmail. Drive already has a backup, so automatic backup is paused until you choose which data to keep.",
                     isError = false
                 )
             }
@@ -987,11 +1000,7 @@ class TaskViewModel(
 
     fun disconnectGoogleDrive() {
         viewModelScope.launch {
-            try {
-                driveBackupManager.getGoogleSignInClient().signOut()
-            } catch (_: Exception) {
-            }
-            driveBackupManager.setSyncConflictPending(false)
+            driveBackupManager.disconnect()
             refreshDriveState(message = "Disconnected from Google Drive")
         }
     }

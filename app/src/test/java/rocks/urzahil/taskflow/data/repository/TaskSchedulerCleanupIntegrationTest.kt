@@ -86,7 +86,6 @@ class TaskSchedulerCleanupIntegrationTest {
         dao.performCleanupAndRolloverBatch(
             tasksToDelete = emptyList(),
             tasksToUpdate = listOf(staleRolloverCandidate),
-            taskIdsForCompletionDeletion = emptyList(),
             todayIso = today.toIsoString()
         )
 

@@ -1,11 +1,8 @@
 package rocks.urzahil.taskflow.ui.settings
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -76,8 +73,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -95,7 +90,6 @@ fun SettingsScreen(
     onAddCategory: (name: String, colorHex: Long, iconName: String) -> Unit,
     onEditCategory: (oldName: String, newName: String, colorHex: Long, iconName: String, isDefault: Boolean) -> Unit,
     onDeleteCategory: (String) -> Unit,
-    onBack: () -> Unit = {},
     onRunMaintenance: () -> Unit = {},
     driveSyncState: DriveSyncState = DriveSyncState(),
     onConnectDrive: () -> Unit = {},
@@ -126,386 +120,127 @@ fun SettingsScreen(
     lastRolloverInfo: Pair<String, String>? = null,
     modifier: Modifier = Modifier
 ) {
-    BackHandler(onBack = onBack)
-
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var categoryToEdit by remember { mutableStateOf<CategoryEntity?>(null) }
     var categoryToDelete by remember { mutableStateOf<CategoryEntity?>(null) }
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
     var showImportConfirmDialog by remember { mutableStateOf(false) }
 
-    val density = LocalDensity.current
-    val edgeThresholdPx = with(density) { 60.dp.toPx() }
-    val swipeDistanceThresholdPx = with(density) { 70.dp.toPx() }
-
-    Box(
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .pointerInput(onBack) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val startX = down.position.x
-                    // Detect gestures starting from the left of the screen
-                    if (startX <= edgeThresholdPx) {
-                        var totalDeltaX = 0f
-                        var totalDeltaY = 0f
-                        var triggered = false
-
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!change.pressed) break
-
-                            val dx = change.position.x - change.previousPosition.x
-                            val dy = change.position.y - change.previousPosition.y
-                            totalDeltaX += dx
-                            totalDeltaY += kotlin.math.abs(dy)
-
-                            // Check if swiped rightwards from the left edge
-                            if (!triggered && totalDeltaX > swipeDistanceThresholdPx && totalDeltaX > totalDeltaY * 1.2f) {
-                                triggered = true
-                                change.consume()
-                                onBack()
-                                break
-                            }
-                        }
-                    }
-                }
-            }
+            .testTag("settings_screen_container"),
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 80.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .testTag("settings_screen_container"),
-            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 80.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            // Section: Task Categories (Moved to top of Settings)
-            item {
-                SettingsSectionHeader(
-                    title = "TASK CATEGORIES",
-                    icon = Icons.Default.Category
-                )
-            }
+        // Section: Task Categories
+        item {
+            SettingsSectionHeader(
+                title = "TASK CATEGORIES",
+                icon = Icons.Default.Category
+            )
+        }
 
-            // Section: Category Management Header
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("categories_management_card")
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Task Categories",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Create, edit colors and icons, or manage task categories.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Surface(
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text(
-                                    text = "${categories.size} TOTAL",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        FilledTonalButton(
-                            onClick = { showAddCategoryDialog = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("add_category_button"),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Add New Category", fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-            }
-
-            // Section Title
-            item {
-                Text(
-                    text = "Existing Categories (${categories.size})",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 4.dp, top = 2.dp)
-                )
-            }
-
-            // Categories List
-            item {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    categories.forEach { category ->
-                        val icon = CategoryIcons.getIcon(category.iconName)
-                        val catColor = Color(category.colorHex)
-
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surface
-                            ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { categoryToEdit = category }
-                                .testTag("category_card_${category.name}")
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .clip(CircleShape)
-                                            .background(catColor.copy(alpha = 0.15f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = icon,
-                                            contentDescription = null,
-                                            tint = catColor,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.width(10.dp))
-
-                                    Column {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = category.name,
-                                                style = MaterialTheme.typography.titleSmall,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            if (category.isDefault) {
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Surface(
-                                                    color = MaterialTheme.colorScheme.primaryContainer,
-                                                    shape = RoundedCornerShape(5.dp)
-                                                ) {
-                                                    Text(
-                                                        text = "Default",
-                                                        modifier = Modifier.padding(
-                                                            horizontal = 5.dp,
-                                                            vertical = 1.5.dp
-                                                        ),
-                                                        style = MaterialTheme.typography.labelSmall.copy(
-                                                            fontSize = 9.5.sp
-                                                        ),
-                                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                }
-                                            }
-                                        }
-                                        Text(
-                                            text = if (category.isDefault) "Default category • Tap to edit" else "Custom category • Tap to edit",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    // Edit button
-                                    IconButton(
-                                        onClick = { categoryToEdit = category },
-                                        modifier = Modifier
-                                            .testTag("edit_category_${category.name}")
-                                            .size(32.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Edit,
-                                            contentDescription = "Edit category ${category.name}",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-
-                                    // Delete button
-                                    if (!category.isDefault) {
-                                        IconButton(
-                                            onClick = { categoryToDelete = category },
-                                            modifier = Modifier
-                                                .testTag("delete_category_${category.name}")
-                                                .size(32.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Delete,
-                                                contentDescription = "Delete category ${category.name}",
-                                                tint = MaterialTheme.colorScheme.error,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Information Card
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                ) {
+        // Section: Category Management Header
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("categories_management_card")
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.Top
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Default.Info,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Category & Task Synchronization",
-                                style = MaterialTheme.typography.titleSmall,
+                                text = "Task Categories",
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            Spacer(modifier = Modifier.height(3.dp))
                             Text(
-                                text = "When you rename a category or change its color, all existing tasks under that category update automatically.",
+                                text = "Create, edit colors and icons, or manage task categories.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    }
-                }
-            }
-
-            // Section: Appaerance
-            item {
-                SettingsSectionHeader(
-                    title = "APPAERANCE",
-                    icon = Icons.Default.Palette
-                )
-            }
-
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("display_preferences_card")
-                ) {
-                    Column {
-                        // Dark Theme Mode Toggle
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onToggleDarkMode(!isDarkMode) }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = if (isDarkMode) Icons.Default.DarkMode else Icons.Default.LightMode,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "Theme",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = if (isDarkMode) "Dark theme" else "Light theme",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Switch(
-                                checked = isDarkMode,
-                                onCheckedChange = onToggleDarkMode,
-                                modifier = Modifier.testTag("toggle_dark_mode_switch")
+                            Text(
+                                text = "${categories.size} TOTAL",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
+                    }
 
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(horizontal = 12.dp)
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    FilledTonalButton(
+                        onClick = { showAddCategoryDialog = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("add_category_button"),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
                         )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Add New Category", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
 
-                        // Color Theme (Dynamic Colors)
+        // Section Title
+        item {
+            Text(
+                text = "Existing Categories (${categories.size})",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+            )
+        }
+
+        // Categories List
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                categories.forEach { category ->
+                    val icon = CategoryIcons.getIcon(category.iconName)
+                    val catColor = Color(category.colorHex)
+
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { categoryToEdit = category }
+                            .testTag("category_card_${category.name}")
+                    ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onToggleDynamicColors(!useDynamicColors) }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -515,719 +250,88 @@ fun SettingsScreen(
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(34.dp)
+                                        .size(32.dp)
                                         .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                        .background(catColor.copy(alpha = 0.15f)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.Palette,
+                                        imageVector = icon,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        tint = catColor,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
+
                                 Spacer(modifier = Modifier.width(10.dp))
+
                                 Column {
-                                    Text(
-                                        text = "Colors",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = if (useDynamicColors) "System dynamic theme" else "App theme",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Switch(
-                                checked = useDynamicColors,
-                                onCheckedChange = onToggleDynamicColors,
-                                modifier = Modifier.testTag("toggle_dynamic_colors_switch")
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Section: Views & Navigation
-            item {
-                SettingsSectionHeader(
-                    title = "VIEWS & NAVIGATION",
-                    icon = Icons.Default.ViewAgenda
-                )
-            }
-
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("views_preferences_card")
-                ) {
-                    Column {
-                        // Default Startup View Selector
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 12.dp)
-                                .testTag("start_view_preference_section")
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Today,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "Startup view",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "Select which view the app opens to on launch",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                val startViewOptions = listOf(
-                                    Triple(
-                                        ViewMode.DAILY,
-                                        "Daily",
-                                        Icons.AutoMirrored.Filled.FormatListBulleted to "start_view_daily_button"
-                                    ),
-                                    Triple(
-                                        ViewMode.MONTHLY,
-                                        "Monthly",
-                                        Icons.Default.CalendarMonth to "start_view_monthly_button"
-                                    ),
-                                    Triple(
-                                        ViewMode.LIST,
-                                        "List",
-                                        Icons.Default.ViewAgenda to "start_view_list_button"
-                                    )
-                                )
-
-                                startViewOptions.forEach { (mode, label, iconAndTag) ->
-                                    val (icon, tag) = iconAndTag
-                                    val isSelected = startViewMode == mode
-                                    Surface(
-                                        selected = isSelected,
-                                        onClick = { onSelectStartViewMode(mode) },
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(
-                                            alpha = 0.5f
-                                        ),
-                                        border = if (isSelected) androidx.compose.foundation.BorderStroke(
-                                            1.5.dp,
-                                            MaterialTheme.colorScheme.primary
-                                        ) else null,
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(44.dp)
-                                            .testTag(tag)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .padding(horizontal = 6.dp),
-                                            horizontalArrangement = Arrangement.Center,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            if (isSelected) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Check,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.size(14.dp)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = category.name,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (category.isDefault) {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Surface(
+                                                color = MaterialTheme.colorScheme.primaryContainer,
+                                                shape = RoundedCornerShape(5.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Default",
+                                                    modifier = Modifier.padding(
+                                                        horizontal = 5.dp,
+                                                        vertical = 1.5.dp
+                                                    ),
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontSize = 9.5.sp
+                                                    ),
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                    fontWeight = FontWeight.Bold
                                                 )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                            } else {
-                                                Icon(
-                                                    imageVector = icon,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.size(14.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
                                             }
-                                            Text(
-                                                text = label,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1
-                                            )
                                         }
                                     }
-                                }
-                            }
-                        }
-
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(horizontal = 12.dp)
-                        )
-
-                        // Monthly View
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onToggleShowMonthlyView(!showMonthlyView) }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CalendarMonth,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
                                     Text(
-                                        text = "Monthly view",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "Show the Monthly calendar tab in navigation",
+                                        text = if (category.isDefault) "Default category • Tap to edit" else "Custom category • Tap to edit",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
-                            Switch(
-                                checked = showMonthlyView,
-                                onCheckedChange = onToggleShowMonthlyView,
-                                modifier = Modifier.testTag("toggle_monthly_view_switch")
-                            )
-                        }
 
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(horizontal = 12.dp)
-                        )
-
-                        // List View
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onToggleShowListView(!showListView) }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ViewAgenda,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "List view",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "Show the 7-day List tab in navigation",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Switch(
-                                checked = showListView,
-                                onCheckedChange = onToggleShowListView,
-                                modifier = Modifier.testTag("toggle_list_view_switch")
-                            )
-                        }
-
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(horizontal = 12.dp)
-                        )
-
-                        // Daily Progress Bar
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onToggleDailyProgress(!showDailyProgress) }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Tune,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "Daily progress bar",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "Show completion bar and stats in Daily view",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Switch(
-                                checked = showDailyProgress,
-                                onCheckedChange = onToggleDailyProgress,
-                                modifier = Modifier.testTag("toggle_daily_progress_switch")
-                            )
-                        }
-
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(horizontal = 12.dp)
-                        )
-
-                        // Monthly Task List
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onToggleShowMonthlyTaskList(!showMonthlyTaskList) }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CalendarMonth,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "Monthly task list",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "Show the task list under the calendar in Monthly view",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Switch(
-                                checked = showMonthlyTaskList,
-                                onCheckedChange = onToggleShowMonthlyTaskList,
-                                modifier = Modifier.testTag("toggle_monthly_tasks_switch")
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Section: Backup
-            item {
-                SettingsSectionHeader(
-                    title = "BACKUP",
-                    icon = Icons.Default.Cloud
-                )
-            }
-
-            // Section: Google Drive Cloud Backup & Restore
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("google_drive_card")
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
+                                // Edit button
+                                IconButton(
+                                    onClick = { categoryToEdit = category },
                                     modifier = Modifier
-                                        .size(34.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
-                                    contentAlignment = Alignment.Center
+                                        .testTag("edit_category_${category.name}")
+                                        .size(32.dp)
                                 ) {
                                     Icon(
-                                        Icons.Default.Cloud,
-                                        contentDescription = null,
+                                        Icons.Default.Edit,
+                                        contentDescription = "Edit category ${category.name}",
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "Google Drive Backup",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = if (driveSyncState.isSignedIn) {
-                                            if (driveSyncState.autoBackupEnabled) "Connected & sync enabled" else "Connected"
-                                        } else {
-                                            "Not connected"
-                                        },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (driveSyncState.isSignedIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
 
-                            if (driveSyncState.isSignedIn) {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.primaryContainer,
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Text(
-                                        text = "ACTIVE",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.padding(
-                                            horizontal = 8.dp,
-                                            vertical = 4.dp
-                                        )
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        if (!driveSyncState.isSignedIn) {
-                            Text(
-                                text = "Save tasks to your Google Drive to keep them safe and automatically restore them whenever you reinstall TaskFlow or switch devices.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Button(
-                                onClick = onConnectDrive,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("connect_google_drive_button"),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.CloudUpload,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Connect Google Drive", fontWeight = FontWeight.SemiBold)
-                            }
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            OutlinedButton(
-                                onClick = onShowError10Info,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("view_error_10_guide_button"),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Info,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    "Sign-In Error 10? View SHA-1 & Setup Guide",
-                                    fontSize = 12.5.sp
-                                )
-                            }
-                        } else {
-                            // Account details
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(10.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.AccountCircle,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = driveSyncState.userEmail ?: "Google Account",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-                                    TextButton(
-                                        onClick = onDisconnectDrive,
-                                        modifier = Modifier.testTag("disconnect_drive_button")
-                                    ) {
-                                        Text("Disconnect", color = MaterialTheme.colorScheme.error)
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Backup Status details
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 4.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = "Last Backup:",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        text = driveSyncState.lastBackupTimeFormatted
-                                            ?: "No backup yet",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                                if (driveSyncState.lastBackupCount > 0) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(
-                                            text = "Backed up tasks:",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Text(
-                                            text = "${driveSyncState.lastBackupCount} tasks",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-                                }
-                                if (driveSyncState.lastBackupCategoriesCount > 0) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(
-                                            text = "Backed up categories:",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Text(
-                                            text = "${driveSyncState.lastBackupCategoriesCount} categories",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Auto-backup toggle switch
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { onSetAutoBackup(!driveSyncState.autoBackupEnabled) }
-                                    .padding(vertical = 4.dp, horizontal = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Automatic Cloud Backup",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        text = "Save to Google Drive on every change",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Switch(
-                                    checked = driveSyncState.autoBackupEnabled,
-                                    onCheckedChange = onSetAutoBackup
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(14.dp))
-
-                            if (driveSyncState.isSyncing) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.Center,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text(
-                                        text = "Syncing with Google Drive...",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            } else {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Button(
-                                        onClick = onBackupToDrive,
+                                // Delete button
+                                if (!category.isDefault) {
+                                    IconButton(
+                                        onClick = { categoryToDelete = category },
                                         modifier = Modifier
-                                            .weight(1f)
-                                            .testTag("backup_now_button"),
-                                        shape = RoundedCornerShape(10.dp)
+                                            .testTag("delete_category_${category.name}")
+                                            .size(32.dp)
                                     ) {
                                         Icon(
-                                            Icons.Default.CloudUpload,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete category ${category.name}",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(18.dp)
                                         )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Backup", fontWeight = FontWeight.SemiBold)
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = { showRestoreConfirmDialog = true },
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .testTag("restore_drive_button"),
-                                        shape = RoundedCornerShape(10.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.CloudDownload,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Restore", fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                             }
@@ -1235,61 +339,229 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
 
-            // Section: JSON File Backup & Transfer (Works without Cloud setup)
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("file_backup_card")
+        // Information Card
+        item {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.Top
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Category & Task Synchronization",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "When you rename a category or change its color, all existing tasks under that category update automatically.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        // Section: Appearance
+        item {
+            SettingsSectionHeader(
+                title = "APPEARANCE",
+                icon = Icons.Default.Palette
+            )
+        }
+
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("display_preferences_card")
+            ) {
+                Column {
+                    // Dark Theme Mode Toggle
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggleDarkMode(!isDarkMode) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
                         ) {
                             Box(
                                 modifier = Modifier
                                     .size(34.dp)
                                     .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    Icons.Default.CloudDone,
+                                    imageVector = if (isDarkMode) Icons.Default.DarkMode else Icons.Default.LightMode,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.secondary,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = "File Backup & Restore (JSON)",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
+                                    text = "Theme",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "Instant zero-configuration transfer",
+                                    text = if (isDarkMode) "Dark theme" else "Light theme",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = "Export all tasks and completion history to a JSON file. Save directly to your Google Drive app, local files, or send via email.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        Switch(
+                            checked = isDarkMode,
+                            onCheckedChange = onToggleDarkMode,
+                            modifier = Modifier.testTag("toggle_dark_mode_switch")
                         )
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // Color Theme (Dynamic Colors)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggleDynamicColors(!useDynamicColors) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Palette,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Colors",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (useDynamicColors) "System dynamic theme" else "App theme",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = useDynamicColors,
+                            onCheckedChange = onToggleDynamicColors,
+                            modifier = Modifier.testTag("toggle_dynamic_colors_switch")
+                        )
+                    }
+                }
+            }
+        }
+
+        // Section: Views & Navigation
+        item {
+            SettingsSectionHeader(
+                title = "VIEWS & NAVIGATION",
+                icon = Icons.Default.ViewAgenda
+            )
+        }
+
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("views_preferences_card")
+            ) {
+                Column {
+                    // Default Startup View Selector
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 12.dp)
+                            .testTag("start_view_preference_section")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Today,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Startup view",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Select which view the app opens to on launch",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
 
                         Spacer(modifier = Modifier.height(10.dp))
 
@@ -1297,81 +569,325 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            FilledTonalButton(
-                                onClick = onExportJsonBackup,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("export_json_backup_button"),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.CloudUpload,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
+                            val startViewOptions = listOf(
+                                Triple(
+                                    ViewMode.DAILY,
+                                    "Daily",
+                                    Icons.AutoMirrored.Filled.FormatListBulleted to "start_view_daily_button"
+                                ),
+                                Triple(
+                                    ViewMode.MONTHLY,
+                                    "Monthly",
+                                    Icons.Default.CalendarMonth to "start_view_monthly_button"
+                                ),
+                                Triple(
+                                    ViewMode.LIST,
+                                    "List",
+                                    Icons.Default.ViewAgenda to "start_view_list_button"
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Export", fontWeight = FontWeight.SemiBold)
-                            }
-
-                            OutlinedButton(
-                                onClick = { showImportConfirmDialog = true },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("import_json_backup_button"),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.CloudDownload,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Import", fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        OutlinedButton(
-                            onClick = onShareJsonBackup,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("share_json_backup_button"),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Share,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Share Backup File via App", fontSize = 12.5.sp)
+
+                            startViewOptions.forEach { (mode, label, iconAndTag) ->
+                                val (icon, tag) = iconAndTag
+                                val isSelected = startViewMode == mode
+                                Surface(
+                                    selected = isSelected,
+                                    onClick = { onSelectStartViewMode(mode) },
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(
+                                        alpha = 0.5f
+                                    ),
+                                    border = if (isSelected) androidx.compose.foundation.BorderStroke(
+                                        1.5.dp,
+                                        MaterialTheme.colorScheme.primary
+                                    ) else null,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp)
+                                        .testTag(tag)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = 6.dp),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                        } else {
+                                            Icon(
+                                                imageVector = icon,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                        }
+                                        Text(
+                                            text = label,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
                         }
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // Monthly View
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggleShowMonthlyView(!showMonthlyView) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CalendarMonth,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Monthly view",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Show the Monthly calendar tab in navigation",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = showMonthlyView,
+                            onCheckedChange = onToggleShowMonthlyView,
+                            modifier = Modifier.testTag("toggle_monthly_view_switch")
+                        )
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // List View
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggleShowListView(!showListView) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ViewAgenda,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "List view",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Show the 7-day List tab in navigation",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = showListView,
+                            onCheckedChange = onToggleShowListView,
+                            modifier = Modifier.testTag("toggle_list_view_switch")
+                        )
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // Daily Progress Bar
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggleDailyProgress(!showDailyProgress) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Tune,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Daily progress bar",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Show completion bar and stats in Daily view",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = showDailyProgress,
+                            onCheckedChange = onToggleDailyProgress,
+                            modifier = Modifier.testTag("toggle_daily_progress_switch")
+                        )
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // Monthly Task List
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggleShowMonthlyTaskList(!showMonthlyTaskList) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CalendarMonth,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Monthly task list",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Show the task list under the calendar in Monthly view",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = showMonthlyTaskList,
+                            onCheckedChange = onToggleShowMonthlyTaskList,
+                            modifier = Modifier.testTag("toggle_monthly_tasks_switch")
+                        )
                     }
                 }
             }
+        }
 
-            // Section: Automation & Maintenance
-            item {
-                SettingsSectionHeader(
-                    title = "AUTOMATION & MAINTENANCE",
-                    icon = Icons.Default.AutoMode
-                )
-            }
+        // Section: Backup
+        item {
+            SettingsSectionHeader(
+                title = "BACKUP",
+                icon = Icons.Default.Cloud
+            )
+        }
 
-            // Daily Rollover & Cleanup (Directly accessible, no dropdown)
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("maintenance_card")
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+        // Section: Google Drive Cloud Backup & Restore
+        item {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("google_drive_card")
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
@@ -1381,7 +897,7 @@ fun SettingsScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    Icons.Default.AutoMode,
+                                    Icons.Default.Cloud,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(18.dp)
@@ -1390,166 +906,602 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = "Daily Rollover & Cleanup",
+                                    text = "Google Drive Backup",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (rolloverCleanupEnabled) "Runs on startup & every time app is foregrounded" else "Automatic background job is disabled",
+                                    text = if (driveSyncState.isSignedIn) {
+                                        if (driveSyncState.autoBackupEnabled) "Connected & sync enabled" else "Connected"
+                                    } else {
+                                        "Not connected"
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (driveSyncState.isSignedIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(bottom = 6.dp)
+                        if (driveSyncState.isSignedIn) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = "ACTIVE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(
+                                        horizontal = 8.dp,
+                                        vertical = 4.dp
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    if (!driveSyncState.isSignedIn) {
+                        Text(
+                            text = "Save tasks to your Google Drive to keep them safe and automatically restore them whenever you reinstall TaskFlow or switch devices.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        // Rollover & cleanup toggle switch
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Button(
+                            onClick = onConnectDrive,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("connect_google_drive_button"),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.CloudUpload,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Connect Google Drive", fontWeight = FontWeight.SemiBold)
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        OutlinedButton(
+                            onClick = onShowError10Info,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("view_error_10_guide_button"),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                "Sign-In Error 10? View SHA-1 & Setup Guide",
+                                fontSize = 12.5.sp
+                            )
+                        }
+                    } else {
+                        // Account details
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        Icons.Default.AccountCircle,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = driveSyncState.userEmail ?: "Google Account",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                TextButton(
+                                    onClick = onDisconnectDrive,
+                                    modifier = Modifier.testTag("disconnect_drive_button")
+                                ) {
+                                    Text("Disconnect", color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Backup Status details
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Last Backup:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = driveSyncState.lastBackupTimeFormatted
+                                        ?: "No backup yet",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            if (driveSyncState.lastBackupCount > 0) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "Backed up tasks:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "${driveSyncState.lastBackupCount} tasks",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                            if (driveSyncState.lastBackupCategoriesCount > 0) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "Backed up categories:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "${driveSyncState.lastBackupCategoriesCount} categories",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Auto-backup toggle switch
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable { onToggleRolloverCleanupEnabled(!rolloverCleanupEnabled) }
-                                .padding(vertical = 4.dp),
+                                .clickable { onSetAutoBackup(!driveSyncState.autoBackupEnabled) }
+                                .padding(vertical = 4.dp, horizontal = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Automatic Rollover & Cleanup",
+                                    text = "Automatic Cloud Backup",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium
                                 )
                                 Text(
-                                    text = if (rolloverCleanupEnabled) "Carries forward tasks and cleans old items automatically" else "Disabled — tasks won't roll over automatically",
+                                    text = "Save to Google Drive on every change",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (rolloverCleanupEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Switch(
-                                checked = rolloverCleanupEnabled,
-                                onCheckedChange = onToggleRolloverCleanupEnabled,
-                                modifier = Modifier.testTag("rollover_cleanup_switch")
+                                checked = driveSyncState.autoBackupEnabled,
+                                onCheckedChange = onSetAutoBackup
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                        Text(
-                            text = "• Removes completed tasks from previous days.\n• Carries forward uncompleted tasks to today.\n• Cleans old occurrences of recurring tasks.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        if (lastRolloverInfo != null && lastRolloverInfo.first.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(8.dp))
+                        if (driveSyncState.isSyncing) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "Last verified rollover:",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
                                 )
+                                Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    text = if (lastRolloverInfo.second.isNotBlank()) "${lastRolloverInfo.first} at ${lastRolloverInfo.second}" else lastRolloverInfo.first,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
+                                    text = "Syncing with Google Drive...",
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             }
-                        }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = onBackupToDrive,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("backup_now_button"),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.CloudUpload,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Backup", fontWeight = FontWeight.SemiBold)
+                                }
 
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        FilledTonalButton(
-                            onClick = onRunMaintenance,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("run_maintenance_button"),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Run Cleanup & Rollover Now", fontWeight = FontWeight.SemiBold)
+                                OutlinedButton(
+                                    onClick = { showRestoreConfirmDialog = true },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("restore_drive_button"),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.CloudDownload,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Restore", fontWeight = FontWeight.SemiBold)
+                                }
+                            }
                         }
                     }
                 }
             }
+        }
 
-            // Section: About
-            item {
-                SettingsSectionHeader(
-                    title = "ABOUT",
-                    icon = Icons.Default.Info
-                )
-            }
-
-            // App Version Card
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("about_card")
-                ) {
+        // Section: JSON File Backup & Transfer (Works without Cloud setup)
+        item {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("file_backup_card")
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(34.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
+                                .background(MaterialTheme.colorScheme.secondaryContainer),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.CalendarMonth,
+                                Icons.Default.CloudDone,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
                             Text(
-                                text = "TaskFlow",
+                                text = "File Backup & Restore (JSON)",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Version ${rocks.urzahil.taskflow.BuildConfig.VERSION_NAME}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = "Daily schedule, calendar, 7-day overview & smart task management",
+                                text = "Instant zero-configuration transfer",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Export all tasks and completion history to a JSON file. Save directly to your Google Drive app, local files, or send via email.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilledTonalButton(
+                            onClick = onExportJsonBackup,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("export_json_backup_button"),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.CloudUpload,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Export", fontWeight = FontWeight.SemiBold)
+                        }
+
+                        OutlinedButton(
+                            onClick = { showImportConfirmDialog = true },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("import_json_backup_button"),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.CloudDownload,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Import", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    OutlinedButton(
+                        onClick = onShareJsonBackup,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("share_json_backup_button"),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Share,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Share Backup File via App", fontSize = 12.5.sp)
+                    }
+                }
+            }
+        }
+
+        // Section: Automation & Maintenance
+        item {
+            SettingsSectionHeader(
+                title = "AUTOMATION & MAINTENANCE",
+                icon = Icons.Default.AutoMode
+            )
+        }
+
+        // Daily Rollover & Cleanup
+        item {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("maintenance_card")
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.AutoMode,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Daily Rollover & Cleanup",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (rolloverCleanupEnabled) "Runs on startup & every time app is foregrounded" else "Automatic background job is disabled",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+
+                    // Rollover & cleanup toggle switch
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onToggleRolloverCleanupEnabled(!rolloverCleanupEnabled) }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Automatic Rollover & Cleanup",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = if (rolloverCleanupEnabled) "Carries forward tasks and cleans old items automatically" else "Disabled — tasks won't roll over automatically",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (rolloverCleanupEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = rolloverCleanupEnabled,
+                            onCheckedChange = onToggleRolloverCleanupEnabled,
+                            modifier = Modifier.testTag("rollover_cleanup_switch")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "• Removes completed tasks from previous days.\n• Carries forward uncompleted tasks to today.\n• Cleans old occurrences of recurring tasks.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (lastRolloverInfo != null && lastRolloverInfo.first.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Last verified rollover:",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = if (lastRolloverInfo.second.isNotBlank()) "${lastRolloverInfo.first} at ${lastRolloverInfo.second}" else lastRolloverInfo.first,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    FilledTonalButton(
+                        onClick = onRunMaintenance,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("run_maintenance_button"),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Run Cleanup & Rollover Now", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+
+        // Section: About
+        item {
+            SettingsSectionHeader(
+                title = "ABOUT",
+                icon = Icons.Default.Info
+            )
+        }
+
+        // App Version Card
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("about_card")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "TaskFlow",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Version ${rocks.urzahil.taskflow.BuildConfig.VERSION_NAME}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Daily schedule, calendar, 7-day overview & smart task management",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -1822,7 +1774,7 @@ private fun CategoryFormDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    CategoryIcons.AVAILABLE_ICONS.take(12).forEach { (iconKey, vector) ->
+                    CategoryIcons.AVAILABLE_ICONS.forEach { (iconKey, vector) ->
                         val isSelected = selectedIconName == iconKey
                         Box(
                             modifier = Modifier

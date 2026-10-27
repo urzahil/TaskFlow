@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import rocks.urzahil.taskflow.data.drive.DRIVE_APPDATA_SCOPE
 import rocks.urzahil.taskflow.data.drive.GoogleOAuthHelper
 
 @Composable
@@ -53,11 +54,12 @@ fun GoogleError10Dialog(
 ) {
     val context = LocalContext.current
     val packageName = context.packageName
-    val sha1 =
-        remember(context) { GoogleOAuthHelper.getSigningCertificateFingerprint(context, "SHA-1") }
-    val sha256 =
-        remember(context) { GoogleOAuthHelper.getSigningCertificateFingerprint(context, "SHA-256") }
-    val projectId = GoogleOAuthHelper.PROJECT_ID
+    val sha1 = remember(context) {
+        GoogleOAuthHelper.getSigningCertificateFingerprint(context, "SHA-1") ?: UNAVAILABLE
+    }
+    val sha256 = remember(context) {
+        GoogleOAuthHelper.getSigningCertificateFingerprint(context, "SHA-256") ?: UNAVAILABLE
+    }
 
     var copiedField by remember { mutableStateOf<String?>(null) }
 
@@ -72,15 +74,13 @@ fun GoogleError10Dialog(
     fun copyAllDetails() {
         val allText = buildString {
             appendLine("--- Google Cloud OAuth Setup Details ---")
-            appendLine("Project ID: $projectId")
             appendLine("Package Name: $packageName")
             appendLine("SHA-1 Certificate Fingerprint:")
             appendLine(sha1)
             appendLine("SHA-256 Certificate Fingerprint:")
             appendLine(sha256)
-            appendLine("Scopes Required:")
-            appendLine("https://www.googleapis.com/auth/drive.file")
-            appendLine("https://www.googleapis.com/auth/drive.appdata")
+            appendLine("Scope Required:")
+            appendLine(DRIVE_APPDATA_SCOPE.scopeUri)
         }
         copyToClipboard("All Setup Details", allText)
     }
@@ -158,16 +158,6 @@ fun GoogleError10Dialog(
                             isCopied = copiedField == "SHA-1 Fingerprint",
                             onCopy = { copyToClipboard("SHA-1 Fingerprint", sha1) }
                         )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Project ID
-                        CredentialRow(
-                            label = "Google Cloud Project ID",
-                            value = projectId,
-                            isCopied = copiedField == "Project ID",
-                            onCopy = { copyToClipboard("Project ID", projectId) }
-                        )
                     }
                 }
 
@@ -181,7 +171,7 @@ fun GoogleError10Dialog(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "1. Open Google Cloud Console (APIs & Services > Credentials)\n" +
-                            "2. Select project '$projectId'\n" +
+                            "2. Select the project that holds your OAuth consent screen\n" +
                             "3. Click 'Create Credentials' > 'OAuth client ID'\n" +
                             "4. Choose Application type: 'Android'\n" +
                             "5. Paste the Package name and SHA-1 above and click Create.",
@@ -296,3 +286,5 @@ private fun CredentialRow(
         }
     }
 }
+
+private const val UNAVAILABLE = "Unavailable"

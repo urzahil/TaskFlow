@@ -23,13 +23,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -80,25 +74,10 @@ import rocks.urzahil.taskflow.ui.model.CategoryIcons
 import kotlinx.coroutines.delay
 import java.util.Calendar
 
-data class CategoryOption(
+private data class CategoryOption(
     val name: String,
     val icon: ImageVector,
     val color: Long
-)
-
-val CATEGORIES = listOf(
-    CategoryOption("General", Icons.Default.CalendarMonth, 0xFF3B82F6),
-    CategoryOption("Work", Icons.Default.Work, 0xFF2563EB),
-    CategoryOption("Personal", Icons.Default.Person, 0xFF8B5CF6),
-    CategoryOption("Pets", Icons.Default.Pets, 0xFF10B981),
-    CategoryOption("Fitness", Icons.Default.FitnessCenter, 0xFFF59E0B),
-    CategoryOption("Home", Icons.Default.Home, 0xFF059669),
-    CategoryOption("Study", Icons.Default.School, 0xFF6366F1)
-)
-
-val RECURRENCE_PRESETS = listOf(
-    1 to "Every Day",
-    7 to "Every Week"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -133,24 +112,26 @@ fun TaskAddEditSheet(
         }
     }
 
-    // Derived category options from availableCategories or fallback
+    // Every install starts with the starter categories, so these are always real, editable ones.
     val categoryOptions = remember(availableCategories) {
-        if (availableCategories.isNotEmpty()) {
-            availableCategories.map {
-                CategoryOption(
-                    name = it.name,
-                    icon = CategoryIcons.getIcon(it.iconName),
-                    color = it.colorHex
-                )
-            }
-        } else {
-            CATEGORIES
+        availableCategories.map {
+            CategoryOption(
+                name = it.name,
+                icon = CategoryIcons.getIcon(it.iconName),
+                color = it.colorHex
+            )
         }
     }
 
     var title by remember { mutableStateOf(existingTask?.title ?: "") }
     var description by remember { mutableStateOf(existingTask?.description ?: "") }
-    var selectedCategory by remember { mutableStateOf(existingTask?.category ?: "General") }
+    var selectedCategory by remember {
+        mutableStateOf(
+            existingTask?.category
+                ?: availableCategories.firstOrNull { it.isDefault }?.name
+                ?: "General"
+        )
+    }
     var selectedColor by remember {
         mutableStateOf(
             existingTask?.colorHex
@@ -165,13 +146,10 @@ fun TaskAddEditSheet(
         mutableStateOf(!existingTask?.recurrenceDaysOfWeek.isNullOrBlank())
     }
     var selectedDaysOfWeek by remember {
+        val savedDays = existingTask?.parsedDaysOfWeek().orEmpty()
         mutableStateOf(
-            if (!existingTask?.recurrenceDaysOfWeek.isNullOrBlank()) {
-                existingTask?.recurrenceDaysOfWeek
-                    ?.split(",")
-                    ?.mapNotNull { it.trim().toIntOrNull() }
-                    ?.toSet()
-                    ?: emptySet()
+            if (savedDays.isNotEmpty()) {
+                savedDays
             } else {
                 setOf(
                     existingTask?.let {
@@ -221,7 +199,8 @@ fun TaskAddEditSheet(
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
 
-    val categoryObj = CATEGORIES.firstOrNull { it.name == selectedCategory } ?: CATEGORIES[0]
+    // Backups reject tasks that end before they start, so never let one be saved.
+    val endsBeforeStart = isRecurring && hasEndDate && endDate < startDate
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -342,7 +321,7 @@ fun TaskAddEditSheet(
                             )
                             Text(
                                 text = "${AppDate.dayOfWeekName(startDate.dayOfWeek())}, ${
-                                    startDate.formatEuropean(
+                                    startDate.formatLong(
                                         includeYear = true
                                     )
                                 }",
@@ -606,7 +585,7 @@ fun TaskAddEditSheet(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = startDate.formatEuropean(includeYear = true),
+                                    text = startDate.formatLong(includeYear = true),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
@@ -638,7 +617,12 @@ fun TaskAddEditSheet(
                             }
                             Switch(
                                 checked = hasEndDate,
-                                onCheckedChange = { hasEndDate = it }
+                                onCheckedChange = { enabled ->
+                                    hasEndDate = enabled
+                                    if (enabled && endDate < startDate) {
+                                        endDate = startDate.plusDays(30)
+                                    }
+                                }
                             )
                         }
 
@@ -659,7 +643,7 @@ fun TaskAddEditSheet(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        text = endDate.formatEuropean(includeYear = true),
+                                        text = endDate.formatLong(includeYear = true),
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -668,6 +652,14 @@ fun TaskAddEditSheet(
                                     Icons.Default.CalendarMonth,
                                     contentDescription = "Pick End Date",
                                     tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            if (endsBeforeStart) {
+                                Text(
+                                    text = "End date must be on or after the start date",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.testTag("end_date_error")
                                 )
                             }
                         }
@@ -786,7 +778,7 @@ fun TaskAddEditSheet(
                         )
                         onSave(taskToSave)
                     },
-                    enabled = title.isNotBlank(),
+                    enabled = title.isNotBlank() && !endsBeforeStart,
                     modifier = Modifier
                         .weight(if (existingTask != null && onDelete != null) 1.8f else 1f)
                         .testTag("save_task_button"),

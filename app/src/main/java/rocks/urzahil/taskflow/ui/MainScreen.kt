@@ -3,6 +3,7 @@ package rocks.urzahil.taskflow.ui
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Box
@@ -37,8 +38,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -66,9 +67,6 @@ import rocks.urzahil.taskflow.ui.list.ListView
 import rocks.urzahil.taskflow.ui.model.ViewMode
 import rocks.urzahil.taskflow.ui.monthly.MonthlyView
 import rocks.urzahil.taskflow.ui.settings.SettingsScreen
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.common.api.CommonStatusCodes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -84,12 +82,7 @@ fun MainScreen(
     val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     val selectedYearMonth by viewModel.selectedYearMonth.collectAsStateWithLifecycle()
-    val dailyTasks by viewModel.dailyTasks.collectAsStateWithLifecycle()
-    val monthlySelectedDayTasks by viewModel.monthlySelectedDayTasks.collectAsStateWithLifecycle()
-    val dailyStats by viewModel.dailyStats.collectAsStateWithLifecycle()
     val taskFilter by viewModel.taskFilter.collectAsStateWithLifecycle()
-    val monthSummaries by viewModel.monthDaysSummary.collectAsStateWithLifecycle()
-    val weekDaysSummary by viewModel.weekDaysSummary.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
 
@@ -104,7 +97,6 @@ fun MainScreen(
     val showMonthlyView by viewModel.showMonthlyView.collectAsStateWithLifecycle()
     val showListView by viewModel.showListView.collectAsStateWithLifecycle()
     val startViewMode by viewModel.startViewMode.collectAsStateWithLifecycle()
-    val next7DaysTasks by viewModel.next7DaysTasks.collectAsStateWithLifecycle()
     val currentToday by viewModel.currentToday.collectAsStateWithLifecycle()
     val lastRolloverInfo by viewModel.lastRolloverInfo.collectAsStateWithLifecycle()
     val rolloverCleanupEnabled by viewModel.rolloverCleanupEnabled.collectAsStateWithLifecycle()
@@ -153,28 +145,16 @@ fun MainScreen(
         }
     }
 
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
+    // Google's account picker / Drive consent screen, shown when connecting needs the user.
+    val driveConsentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
-        try {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-            val account = task.getResult(ApiException::class.java)
-            if (account != null) {
-                viewModel.onGoogleSignInSuccess(account)
-            } else {
-                viewModel.refreshDriveState("Google Sign-In was not completed", isError = true)
-            }
-        } catch (e: Exception) {
-            val statusCode = (e as? ApiException)?.statusCode
-            if (statusCode == 10 || statusCode == CommonStatusCodes.DEVELOPER_ERROR) {
-                viewModel.setShowGoogleError10Dialog(true)
-                viewModel.refreshDriveState(
-                    "Google Sign-In Error 10: OAuth Client ID setup required",
-                    isError = true
-                )
-            } else {
-                viewModel.refreshDriveState("Sign-In error: ${e.message}", isError = true)
-            }
+        viewModel.onDriveConsentResult(result.resultCode, result.data)
+    }
+
+    LaunchedEffect(viewModel) {
+        viewModel.driveConsentRequests.collect { pendingIntent ->
+            driveConsentLauncher.launch(IntentSenderRequest.Builder(pendingIntent).build())
         }
     }
 
@@ -199,12 +179,12 @@ fun MainScreen(
     }
 
     // Handle back gestures / system back button
-    BackHandler(enabled = isSearchActive) {
+    BackHandler(enabled = isSearchActive && viewMode != ViewMode.SETTINGS) {
         isSearchActive = false
         viewModel.setSearchQuery("")
     }
 
-    PredictiveBackHandler(enabled = !isSearchActive && viewMode == ViewMode.SETTINGS) { progress ->
+    PredictiveBackHandler(enabled = viewMode == ViewMode.SETTINGS) { progress ->
         try {
             progress.collect { }
             viewModel.closeSettings()
@@ -381,7 +361,7 @@ fun MainScreen(
                         if (availableTabs.size > 1) {
                             val selectedTabIndex =
                                 availableTabs.indexOfFirst { it.first == viewMode }.coerceAtLeast(0)
-                            TabRow(
+                            SecondaryTabRow(
                                 selectedTabIndex = selectedTabIndex,
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                                 contentColor = MaterialTheme.colorScheme.primary,
@@ -431,8 +411,12 @@ fun MainScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            // Each view collects only its own lists, so hidden views stop computing them.
             when (viewMode) {
                 ViewMode.DAILY -> {
+                    val dailyTasks by viewModel.dailyTasks.collectAsStateWithLifecycle()
+                    val dailyStats by viewModel.dailyStats.collectAsStateWithLifecycle()
+                    val weekDaysSummary by viewModel.weekDaysSummary.collectAsStateWithLifecycle()
                     DailyView(
                         selectedDate = selectedDate,
                         tasks = dailyTasks,
@@ -455,6 +439,9 @@ fun MainScreen(
                 }
 
                 ViewMode.MONTHLY -> {
+                    val monthSummaries by viewModel.monthDaysSummary.collectAsStateWithLifecycle()
+                    val monthlySelectedDayTasks by
+                        viewModel.monthlySelectedDayTasks.collectAsStateWithLifecycle()
                     MonthlyView(
                         yearMonth = selectedYearMonth,
                         selectedDate = selectedDate,
@@ -463,18 +450,15 @@ fun MainScreen(
                         onSelectDate = { viewModel.selectDate(it) },
                         onPrevMonth = { viewModel.prevMonth() },
                         onNextMonth = { viewModel.nextMonth() },
-                        onJumpToCurrentMonth = { viewModel.jumpToCurrentMonth() },
                         onToggleTask = { viewModel.toggleTaskCompletion(it) },
-                        onEditTask = { viewModel.openEditTaskDialog(it) },
-                        onDeleteTask = { viewModel.deleteTask(it) },
                         onSwitchToDailyView = { viewModel.setViewMode(ViewMode.DAILY) },
-                        onAddTaskForDay = { viewModel.openAddTaskDialog() },
                         currentToday = currentToday,
                         showMonthlyTaskList = showMonthlyTaskList
                     )
                 }
 
                 ViewMode.LIST -> {
+                    val next7DaysTasks by viewModel.next7DaysTasks.collectAsStateWithLifecycle()
                     ListView(
                         days = next7DaysTasks,
                         onToggleTask = { viewModel.toggleTaskCompletion(it) }
@@ -484,7 +468,6 @@ fun MainScreen(
                 ViewMode.SETTINGS -> {
                     SettingsScreen(
                         categories = categories,
-                        onBack = { viewModel.closeSettings() },
                         onAddCategory = { name, colorHex, iconName ->
                             viewModel.addCategory(name, colorHex, iconName)
                         },
@@ -507,11 +490,7 @@ fun MainScreen(
                         onToggleRolloverCleanupEnabled = { viewModel.setRolloverCleanupEnabled(it) },
                         lastRolloverInfo = lastRolloverInfo,
                         driveSyncState = driveSyncState,
-                        onConnectDrive = {
-                            googleSignInLauncher.launch(
-                                viewModel.driveBackupManager.getGoogleSignInClient().signInIntent
-                            )
-                        },
+                        onConnectDrive = { viewModel.connectGoogleDrive() },
                         onDisconnectDrive = {
                             viewModel.disconnectGoogleDrive()
                         },

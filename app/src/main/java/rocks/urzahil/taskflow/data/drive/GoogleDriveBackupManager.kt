@@ -1,6 +1,8 @@
 package rocks.urzahil.taskflow.data.drive
 
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.util.Log
 import rocks.urzahil.taskflow.data.model.AppDate
@@ -10,7 +12,6 @@ import rocks.urzahil.taskflow.data.model.TaskEntity
 import rocks.urzahil.taskflow.data.model.TaskOccurrenceExclusionEntity
 import rocks.urzahil.taskflow.data.repository.TaskRepository
 import rocks.urzahil.taskflow.ui.model.CategoryIcons
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -32,11 +33,20 @@ data class RestoreResultData(
     val categoryCount: Int
 )
 
+/** Result of starting to connect Google Drive. */
+sealed interface DriveConnectStep {
+    data class Connected(val accountEmail: String) : DriveConnectStep
+
+    /** Launch [pendingIntent] so the user can pick an account and approve Drive access. */
+    data class NeedsUserConsent(val pendingIntent: PendingIntent) : DriveConnectStep
+}
+
 open class GoogleDriveBackupManager(
     private val context: Context,
-    private val repository: TaskRepository
+    private val repository: TaskRepository,
+    private val authorization: DriveAuthorization = PlayServicesDriveAuthorization(context)
 ) {
-    private val driveService = GoogleDriveService(context)
+    private val driveService = GoogleDriveService(authorization)
     private val prefs: SharedPreferences =
         context.getSharedPreferences("taskflow_drive_backup", Context.MODE_PRIVATE)
 
@@ -49,11 +59,110 @@ open class GoogleDriveBackupManager(
         private const val KEY_HAS_CHECKED_INSTALL_RESTORE = "has_checked_install_restore"
         private const val KEY_PENDING_BACKUP = "durable_pending_backup"
         private const val KEY_SYNC_CONFLICT = "sync_conflict_pending"
+        private const val KEY_ACCOUNT_EMAIL = "connected_account_email"
+        private const val KEY_LEGACY_SIGN_IN_MIGRATED = "legacy_sign_in_migrated"
+
+        // Where the removed GoogleSignIn API stored the signed-in account.
+        private const val LEGACY_SIGN_IN_PREFS = "com.google.android.gms.signin"
+        private const val LEGACY_DEFAULT_ACCOUNT_KEY = "defaultGoogleSignInAccount"
+        private const val LEGACY_ACCOUNT_KEY_PREFIX = "googleSignInAccount:"
     }
 
-    open fun getGoogleSignInClient() = driveService.getGoogleSignInClient()
+    /**
+     * Builds before this one connected through the GoogleSignIn API (removed in play-services-auth
+     * 22), which kept the signed-in account in its own preferences file and removed it on sign-out.
+     * If that record is still there, carry the account over once so existing users stay connected;
+     * their grant already covers the app-data scope, so no consent screen appears. Users who had
+     * signed out have no record and stay disconnected. Safe to delete once no users are left on
+     * those builds.
+     */
+    open suspend fun migrateLegacySignIn() {
+        if (prefs.getBoolean(KEY_LEGACY_SIGN_IN_MIGRATED, false)) return
+        val legacy = context.getSharedPreferences(LEGACY_SIGN_IN_PREFS, Context.MODE_PRIVATE)
+        val legacyId = legacy.getString(LEGACY_DEFAULT_ACCOUNT_KEY, null)
+        if (legacyId != null && !isDriveConnected()) {
+            val email = try {
+                legacyAccountEmail(legacy.getString("$LEGACY_ACCOUNT_KEY_PREFIX$legacyId", null))
+                    ?: (authorization.authorize(accountEmail = null) as? DriveAuthorizationOutcome.Granted)
+                        ?.let { storeGrant(it) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Offline or Play Services unavailable: try again on the next launch.
+                Log.w(TAG, "Could not carry over the previous Google sign-in", e)
+                return
+            }
+            if (email != null) prefs.edit().putString(KEY_ACCOUNT_EMAIL, email).apply()
+        }
+        legacy.edit().clear().apply()
+        prefs.edit().putBoolean(KEY_LEGACY_SIGN_IN_MIGRATED, true).apply()
+    }
 
-    open fun getSignedInAccount(): GoogleSignInAccount? = driveService.getSignedInAccount()
+    private fun legacyAccountEmail(accountJson: String?): String? = try {
+        accountJson?.let { JSONObject(it).optString("email") }?.takeIf { it.isNotBlank() }
+    } catch (_: Exception) {
+        null
+    }
+
+    /** Email of the Google account backups go to, or null when Drive is not connected. */
+    open fun getConnectedAccountEmail(): String? = prefs.getString(KEY_ACCOUNT_EMAIL, null)
+
+    open fun isDriveConnected(): Boolean = getConnectedAccountEmail() != null
+
+    /**
+     * Starts connecting Google Drive. Connects straight away when the user already granted access
+     * on this device; otherwise returns the consent screen to launch, whose result goes to
+     * [completeConnect].
+     */
+    open suspend fun connect(): DriveConnectStep =
+        when (val outcome = authorization.authorize(accountEmail = null)) {
+            is DriveAuthorizationOutcome.Granted -> DriveConnectStep.Connected(storeGrant(outcome))
+            is DriveAuthorizationOutcome.NeedsUserConsent ->
+                DriveConnectStep.NeedsUserConsent(outcome.pendingIntent)
+        }
+
+    /** Finishes connecting with the consent screen's result. Returns the connected account's email. */
+    open suspend fun completeConnect(data: Intent?): String =
+        when (val outcome = authorization.outcomeFromConsentResult(data)) {
+            is DriveAuthorizationOutcome.Granted -> storeGrant(outcome)
+            is DriveAuthorizationOutcome.NeedsUserConsent ->
+                throw IllegalStateException("Google Drive access was not granted")
+        }
+
+    private suspend fun storeGrant(grant: DriveAuthorizationOutcome.Granted): String {
+        val email = grant.accountEmail
+            ?: driveService.fetchAccountEmail(grant.accessToken)
+            ?: throw IllegalStateException("Could not tell which Google account was connected")
+        prefs.edit().putString(KEY_ACCOUNT_EMAIL, email).apply()
+        return email
+    }
+
+    /** Forgets the account and revokes TaskFlow's Drive access, so reconnecting asks again. */
+    open suspend fun disconnect() {
+        val email = getConnectedAccountEmail()
+        forgetConnection()
+        if (email != null) {
+            try {
+                authorization.revokeAccess(email)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Still disconnected locally; the grant just stays until the user reconnects.
+                Log.w(TAG, "Could not revoke Drive access", e)
+            }
+        }
+    }
+
+    private fun forgetConnection() {
+        prefs.edit().remove(KEY_ACCOUNT_EMAIL).putBoolean(KEY_SYNC_CONFLICT, false).apply()
+    }
+
+    /** Disconnects locally when Drive no longer accepts this app's access. */
+    private fun <T> Result<T>.forgetConnectionIfAccessLost(): Result<T> = onFailure {
+        if (it is DriveAccessLostException) forgetConnection()
+    }
+
+    private fun notConnected() = Exception("Google Drive is not connected")
 
     open fun isAutoBackupEnabled(): Boolean = prefs.getBoolean(KEY_AUTO_BACKUP, true)
 
@@ -80,7 +189,8 @@ open class GoogleDriveBackupManager(
 
     /** Flags a conflict when both this device and Drive hold data. Returns true if flagged. */
     open suspend fun detectSyncConflict(): Boolean = withContext(Dispatchers.IO) {
-        val conflict = repository.getTaskCount() > 0 && driveService.findBackupFile() != null
+        val email = getConnectedAccountEmail() ?: return@withContext false
+        val conflict = repository.getTaskCount() > 0 && driveService.findBackupFile(email) != null
         if (conflict) setSyncConflictPending(true)
         conflict
     }
@@ -195,11 +305,9 @@ open class GoogleDriveBackupManager(
         if (tasksArray != null) {
             for (i in 0 until tasksArray.length()) {
                 val obj = tasksArray.getJSONObject(i)
-                val endDate = if (obj.isNull("endDate")) null else obj.optString("endDate", null)
-                val rawDaysOfWeek = if (obj.isNull("recurrenceDaysOfWeek")) null else obj.optString(
-                    "recurrenceDaysOfWeek",
-                    null
-                )
+                val endDate = if (obj.isNull("endDate")) null else obj.optString("endDate")
+                val rawDaysOfWeek =
+                    if (obj.isNull("recurrenceDaysOfWeek")) null else obj.optString("recurrenceDaysOfWeek")
                 val sanitizedDaysOfWeek = rawDaysOfWeek?.split(",")
                     ?.mapNotNull { it.trim().toIntOrNull() }
                     ?.filter { it in 1..7 }
@@ -214,7 +322,7 @@ open class GoogleDriveBackupManager(
                     description = obj.optString("description", ""),
                     category = obj.optString("category", "General"),
                     priority = obj.optString("priority", "Medium"),
-                    colorHex = obj.optLong("colorHex", 0xFF6750A4),
+                    colorHex = obj.optLong("colorHex", 0xFF3B82F6),
                     isRecurring = obj.optBoolean("isRecurring", false),
                     recurrenceDays = obj.optInt("recurrenceDays", 1),
                     recurrenceDaysOfWeek = sanitizedDaysOfWeek,
@@ -236,6 +344,7 @@ open class GoogleDriveBackupManager(
             }
         }
 
+        val recurringTaskIds = tasks.filter { it.isRecurring }.mapTo(HashSet()) { it.id }
         val exclusions = mutableListOf<TaskOccurrenceExclusionEntity>()
         val exclusionsArray = root.optJSONArray("recurringTaskExclusions")
         if (exclusionsArray != null) {
@@ -249,7 +358,7 @@ open class GoogleDriveBackupManager(
                 require(
                     AppDate.parseIso(exclusion.date).toIsoString() == exclusion.date
                 ) { "Invalid occurrence exclusion date" }
-                require(tasks.first { it.id == exclusion.taskId }.isRecurring) { "Occurrence exclusion refers to a non-recurring task" }
+                require(exclusion.taskId in recurringTaskIds) { "Occurrence exclusion refers to a non-recurring task" }
                 exclusions.add(exclusion)
             }
         }
@@ -332,8 +441,9 @@ open class GoogleDriveBackupManager(
         categories: List<CategoryEntity> = emptyList(),
         exclusions: List<TaskOccurrenceExclusionEntity> = emptyList()
     ): Result<DriveBackupInfo> = withContext(Dispatchers.IO) {
+        val email = getConnectedAccountEmail() ?: return@withContext Result.failure(notConnected())
         val json = exportBackupJson(tasks, completions, categories, exclusions)
-        val result = driveService.uploadBackup(json)
+        val result = driveService.uploadBackup(email, json).forgetConnectionIfAccessLost()
         result.onSuccess {
             setSyncConflictPending(false)
             prefs.edit()
@@ -350,7 +460,8 @@ open class GoogleDriveBackupManager(
      * Clears existing default categories and sample tasks so only backup data remains.
      */
     open suspend fun restoreFromDrive(): Result<RestoreResultData> = withContext(Dispatchers.IO) {
-        val downloadResult = driveService.downloadBackup()
+        val email = getConnectedAccountEmail() ?: return@withContext Result.failure(notConnected())
+        val downloadResult = driveService.downloadBackup(email).forgetConnectionIfAccessLost()
         if (downloadResult.isFailure) {
             return@withContext Result.failure(
                 downloadResult.exceptionOrNull() ?: Exception("Failed downloading backup")
@@ -428,14 +539,10 @@ open class GoogleDriveBackupManager(
                 return@withContext Result.success(null)
             }
 
-            val account =
-                driveService.getSignedInAccount() ?: return@withContext Result.success(null)
-            Log.i(
-                TAG,
-                "Fresh install detected with account ${account.email}, checking Drive backup..."
-            )
+            val email = getConnectedAccountEmail() ?: return@withContext Result.success(null)
+            Log.i(TAG, "Fresh install with Drive connected, checking for a backup...")
 
-            val backupInfo = driveService.findBackupFile() ?: run {
+            val backupInfo = driveService.findBackupFile(email) ?: run {
                 prefs.edit().putBoolean(KEY_HAS_CHECKED_INSTALL_RESTORE, true).apply()
                 return@withContext Result.success(null)
             }

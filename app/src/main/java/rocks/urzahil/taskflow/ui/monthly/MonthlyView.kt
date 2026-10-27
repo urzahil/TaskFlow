@@ -25,7 +25,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.EditCalendar
-import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -43,12 +42,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import rocks.urzahil.taskflow.data.model.AppDate
-import rocks.urzahil.taskflow.data.model.TaskEntity
+import rocks.urzahil.taskflow.ui.components.CompactTaskRow
 import rocks.urzahil.taskflow.ui.model.DaySummaryUi
 import rocks.urzahil.taskflow.ui.model.TaskItemUi
 import rocks.urzahil.taskflow.ui.theme.CompletedGreen
@@ -62,12 +60,8 @@ fun MonthlyView(
     onSelectDate: (AppDate) -> Unit,
     onPrevMonth: () -> Unit,
     onNextMonth: () -> Unit,
-    onJumpToCurrentMonth: () -> Unit = {},
     onToggleTask: (TaskItemUi) -> Unit,
-    onEditTask: (TaskEntity) -> Unit,
-    onDeleteTask: (TaskEntity) -> Unit,
     onSwitchToDailyView: () -> Unit,
-    onAddTaskForDay: () -> Unit,
     currentToday: AppDate = AppDate.today(),
     showMonthlyTaskList: Boolean = true,
     modifier: Modifier = Modifier
@@ -305,92 +299,15 @@ fun MonthlyView(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         selectedDayTasks.forEach { taskItem ->
-                            MonthlyTaskRow(
+                            CompactTaskRow(
                                 taskItem = taskItem,
-                                onToggle = { onToggleTask(taskItem) }
+                                onToggle = { onToggleTask(taskItem) },
+                                tagPrefix = "monthly"
                             )
                         }
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun MonthlyTaskRow(
-    taskItem: TaskItemUi,
-    onToggle: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .testTag("monthly_task_item_${taskItem.task.id}"),
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(
-            containerColor = if (taskItem.isCompleted) {
-                MaterialTheme.colorScheme.surfaceContainerLowest
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLow
-            }
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onToggle() }
-                .padding(horizontal = 8.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = onToggle,
-                modifier = Modifier
-                    .size(26.dp)
-                    .testTag("toggle_monthly_task_${taskItem.task.id}")
-            ) {
-                if (taskItem.isCompleted) {
-                    Box(
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.Check,
-                            contentDescription = "Completed",
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(12.dp)
-                        )
-                    }
-                } else {
-                    Icon(
-                        Icons.Default.RadioButtonUnchecked,
-                        contentDescription = "Mark Complete",
-                        tint = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(6.dp))
-
-            Text(
-                text = taskItem.task.title,
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.5.sp),
-                fontWeight = if (taskItem.isCompleted) FontWeight.Normal else FontWeight.Medium,
-                textDecoration = if (taskItem.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
-                color = if (taskItem.isCompleted) {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
         }
     }
 }

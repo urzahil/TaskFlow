@@ -21,7 +21,7 @@ import rocks.urzahil.taskflow.data.drive.GoogleDriveBackupManager
 import rocks.urzahil.taskflow.data.repository.TaskRepository
 import rocks.urzahil.taskflow.ui.MainScreen
 import rocks.urzahil.taskflow.ui.TaskViewModel
-import rocks.urzahil.taskflow.ui.theme.MyApplicationTheme
+import rocks.urzahil.taskflow.ui.theme.TaskFlowTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val isDarkMode by viewModel.isDarkMode.collectAsStateWithLifecycle()
             val useDynamicColors by viewModel.useDynamicColors.collectAsStateWithLifecycle()
-            MyApplicationTheme(darkTheme = isDarkMode, dynamicColor = useDynamicColors) {
+            TaskFlowTheme(darkTheme = isDarkMode, dynamicColor = useDynamicColors) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     MainScreen(viewModel = viewModel)
                 }

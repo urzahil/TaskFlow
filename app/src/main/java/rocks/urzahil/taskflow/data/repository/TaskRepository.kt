@@ -17,9 +17,6 @@ class TaskRepository(private val taskDao: TaskDao) {
         taskDao.getAllOccurrenceExclusions()
     val allCategories: Flow<List<CategoryEntity>> = taskDao.getAllCategories()
 
-    fun getCompletionsForDate(dateIso: String): Flow<List<TaskCompletionEntity>> =
-        taskDao.getCompletionsForDate(dateIso)
-
     suspend fun insertTask(task: TaskEntity): Long = taskDao.insertTask(task)
 
     suspend fun insertTasks(tasks: List<TaskEntity>) = taskDao.insertTasks(tasks)
@@ -31,13 +28,7 @@ class TaskRepository(private val taskDao: TaskDao) {
 
     suspend fun updateTask(task: TaskEntity) = taskDao.updateTask(task)
 
-    suspend fun deleteTask(task: TaskEntity) {
-        taskDao.deleteTaskWithCompletions(task.id)
-    }
-
-    suspend fun deleteTaskById(taskId: Long) {
-        taskDao.deleteTaskWithCompletions(taskId)
-    }
+    suspend fun deleteTask(task: TaskEntity) = taskDao.deleteTaskById(task.id)
 
     suspend fun deleteRecurringOccurrence(taskId: Long, dateIso: String) {
         taskDao.deleteOccurrence(taskId, dateIso)
@@ -110,26 +101,14 @@ class TaskRepository(private val taskDao: TaskDao) {
         TaskScheduler.isTaskScheduledOnDate(task, targetDate)
 
     /**
-     * Seed initial categories only in debug builds. Production installs should not silently create
-     * demo data on first launch.
+     * Gives a new install the starter categories, in every build type. Does nothing once any
+     * category exists, and a restored backup replaces them. Returns true if it added them.
      */
-    suspend fun seedInitialCategoriesIfEmpty() {
-        if (!rocks.urzahil.taskflow.BuildConfig.DEBUG) return
-
-        val defaults = listOf(
-            CategoryEntity("General", 0xFF3B82F6, "general", isDefault = true),
-            CategoryEntity("Work", 0xFF2563EB, "work", isDefault = false),
-            CategoryEntity("Personal", 0xFF8B5CF6, "personal", isDefault = false),
-            CategoryEntity("Health", 0xFF10B981, "health", isDefault = false),
-            CategoryEntity("Fitness", 0xFFF59E0B, "fitness", isDefault = false),
-            CategoryEntity("Home", 0xFF059669, "home", isDefault = false),
-            CategoryEntity("Study", 0xFF6366F1, "study", isDefault = false)
-        )
-        defaults.forEach { insertCategory(it) }
-    }
+    suspend fun seedInitialCategoriesIfEmpty(): Boolean =
+        taskDao.insertCategoriesIfEmpty(STARTER_CATEGORIES)
 
     /**
-     * Seed initial tasks only in debug builds.
+     * Seed demo tasks only in debug builds; production installs should not get sample tasks.
      */
     suspend fun seedInitialTasksIfEmpty() {
         if (!rocks.urzahil.taskflow.BuildConfig.DEBUG) return
@@ -200,6 +179,19 @@ class TaskRepository(private val taskDao: TaskDao) {
                 recurrenceDays = 1,
                 startDate = today.plusDays(1).toIsoString()
             )
+        )
+    }
+
+    companion object {
+        /** The categories every new install starts with; General is the default. */
+        val STARTER_CATEGORIES = listOf(
+            CategoryEntity("General", 0xFF3B82F6, "general", isDefault = true),
+            CategoryEntity("Work", 0xFF2563EB, "work", isDefault = false),
+            CategoryEntity("Personal", 0xFF8B5CF6, "personal", isDefault = false),
+            CategoryEntity("Health", 0xFF10B981, "health", isDefault = false),
+            CategoryEntity("Fitness", 0xFFF59E0B, "fitness", isDefault = false),
+            CategoryEntity("Home", 0xFF059669, "home", isDefault = false),
+            CategoryEntity("Study", 0xFF6366F1, "study", isDefault = false)
         )
     }
 }

@@ -63,7 +63,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
-fun MyApplicationTheme(
+fun TaskFlowTheme(
     darkTheme: Boolean = true,
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit,
