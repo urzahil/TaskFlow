@@ -1,9 +1,13 @@
 package rocks.urzahil.taskflow.ui
 
+import android.app.Activity
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import rocks.urzahil.taskflow.data.drive.DriveConnectStep
 import rocks.urzahil.taskflow.data.drive.GoogleDriveBackupManager
 import rocks.urzahil.taskflow.data.db.CategoryNameConflictException
 import rocks.urzahil.taskflow.data.db.LastDefaultCategoryException
@@ -19,10 +23,12 @@ import rocks.urzahil.taskflow.ui.model.DayTasksGroupUi
 import rocks.urzahil.taskflow.ui.model.TaskFilter
 import rocks.urzahil.taskflow.ui.model.TaskItemUi
 import rocks.urzahil.taskflow.ui.model.ViewMode
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +36,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -261,8 +268,8 @@ class TaskViewModel(
 
     private val _driveSyncState = MutableStateFlow(
         DriveSyncState(
-            isSignedIn = driveBackupManager.getSignedInAccount() != null,
-            userEmail = driveBackupManager.getSignedInAccount()?.email,
+            isSignedIn = driveBackupManager.isDriveConnected(),
+            userEmail = driveBackupManager.getConnectedAccountEmail(),
             lastBackupTimeFormatted = driveBackupManager.getLastBackupTimeFormatted(),
             lastBackupCount = driveBackupManager.getLastBackupCount(),
             lastBackupCategoriesCount = driveBackupManager.getLastBackupCategoriesCount(),
@@ -285,6 +292,9 @@ class TaskViewModel(
 
     init {
         viewModelScope.launch {
+            // Keep users connected across the move off the removed GoogleSignIn API.
+            driveBackupManager.migrateLegacySignIn()
+
             val currentCategories = repository.allCategories.first()
             if (currentCategories.isEmpty()) {
                 repository.seedInitialCategoriesIfEmpty()
@@ -307,7 +317,7 @@ class TaskViewModel(
             // Resume any backup that was durably marked pending before the process was killed or the last attempt failed.
             if (driveBackupManager.isBackupPendingDurable() &&
                 driveBackupManager.isAutoBackupEnabled() &&
-                driveBackupManager.getSignedInAccount() != null
+                driveBackupManager.isDriveConnected()
             ) {
                 isAutoBackupPending = true
                 autoBackupChannel.trySend(Unit)
@@ -345,7 +355,7 @@ class TaskViewModel(
         // Retry any durable backup that is still pending when the app returns to the foreground.
         if (driveBackupManager.isBackupPendingDurable() &&
             driveBackupManager.isAutoBackupEnabled() &&
-            driveBackupManager.getSignedInAccount() != null
+            driveBackupManager.isDriveConnected()
         ) {
             isAutoBackupPending = true
             autoBackupChannel.trySend(Unit)
@@ -758,7 +768,7 @@ class TaskViewModel(
 
     fun triggerAutoBackup(debounceMs: Long = DEFAULT_AUTO_BACKUP_DEBOUNCE_MS) {
         if (!driveBackupManager.isAutoBackupEnabled()) return
-        if (driveBackupManager.getSignedInAccount() == null) return
+        if (!driveBackupManager.isDriveConnected()) return
 
         // Stay quiet (but remember the change) until the user resolves a Drive/local conflict.
         if (driveBackupManager.isSyncConflictPending()) {
@@ -790,7 +800,7 @@ class TaskViewModel(
             while (isAutoBackupPending) {
                 isAutoBackupPending = false
                 if (driveBackupManager.isSyncConflictPending()) break
-                if (!driveBackupManager.isAutoBackupEnabled() || driveBackupManager.getSignedInAccount() == null) {
+                if (!driveBackupManager.isAutoBackupEnabled() || !driveBackupManager.isDriveConnected()) {
                     if (!driveBackupManager.isAutoBackupEnabled()) {
                         driveBackupManager.setBackupPendingDurable(false)
                     }
@@ -822,10 +832,10 @@ class TaskViewModel(
     }
 
     fun refreshDriveState(message: String? = null, isError: Boolean = false) {
-        val account = driveBackupManager.getSignedInAccount()
+        val accountEmail = driveBackupManager.getConnectedAccountEmail()
         _driveSyncState.value = DriveSyncState(
-            isSignedIn = account != null,
-            userEmail = account?.email,
+            isSignedIn = accountEmail != null,
+            userEmail = accountEmail,
             isSyncing = false,
             lastBackupTimeFormatted = driveBackupManager.getLastBackupTimeFormatted(),
             lastBackupCount = driveBackupManager.getLastBackupCount(),
@@ -896,8 +906,59 @@ class TaskViewModel(
         refreshDriveState()
     }
 
-    fun onGoogleSignInSuccess(account: GoogleSignInAccount) {
-        refreshDriveState(message = "Connected to Google Drive as ${account.email}")
+    /** Consent screens for Drive access, for the UI to launch; results go to [onDriveConsentResult]. */
+    private val _driveConsentRequests = Channel<PendingIntent>(Channel.CONFLATED)
+    val driveConsentRequests: Flow<PendingIntent> = _driveConsentRequests.receiveAsFlow()
+
+    /** Connects Google Drive, asking the UI to show Google's consent screen when needed. */
+    fun connectGoogleDrive() {
+        viewModelScope.launch {
+            _driveSyncState.value = _driveSyncState.value.copy(isSyncing = true, syncMessage = null)
+            try {
+                when (val step = driveBackupManager.connect()) {
+                    is DriveConnectStep.Connected -> onDriveConnected(step.accountEmail)
+                    is DriveConnectStep.NeedsUserConsent -> {
+                        refreshDriveState()
+                        _driveConsentRequests.send(step.pendingIntent)
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onDriveConnectFailed(e)
+            }
+        }
+    }
+
+    /** Handles the result of the consent screen requested through [driveConsentRequests]. */
+    fun onDriveConsentResult(resultCode: Int, data: Intent?) {
+        if (resultCode != Activity.RESULT_OK) {
+            refreshDriveState("Google Drive was not connected", isError = true)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                onDriveConnected(driveBackupManager.completeConnect(data))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onDriveConnectFailed(e)
+            }
+        }
+    }
+
+    private fun onDriveConnectFailed(e: Exception) {
+        if ((e as? ApiException)?.statusCode == CommonStatusCodes.DEVELOPER_ERROR) {
+            // The app's signing key is not registered with an OAuth client (sign-in error 10).
+            setShowGoogleError10Dialog(true)
+            refreshDriveState("Google sign-in error 10: OAuth client setup required", isError = true)
+        } else {
+            refreshDriveState("Could not connect Google Drive: ${e.message}", isError = true)
+        }
+    }
+
+    private fun onDriveConnected(accountEmail: String) {
+        refreshDriveState(message = "Connected to Google Drive as $accountEmail")
         // Check if fresh tasks can be auto-restored
         viewModelScope.launch {
             val currentTasks = repository.allTasks.first()
@@ -909,14 +970,14 @@ class TaskViewModel(
                 if (res != null && (res.taskCount > 0 || res.categoryCount > 0)) {
                     onLocalDataReplaced()
                     refreshDriveState(
-                        message = "Connected as ${account.email} and restored ${res.taskCount} tasks & ${res.categoryCount} categories from Drive! 🎉",
+                        message = "Connected as $accountEmail and restored ${res.taskCount} tasks & ${res.categoryCount} categories from Drive! 🎉",
                         isError = false
                     )
                 }
             } else if (driveBackupManager.detectSyncConflict()) {
                 // Both this device and Drive hold data: ask before anything is overwritten.
                 refreshDriveState(
-                    message = "Connected as ${account.email}. Drive already has a backup, so automatic backup is paused until you choose which data to keep.",
+                    message = "Connected as $accountEmail. Drive already has a backup, so automatic backup is paused until you choose which data to keep.",
                     isError = false
                 )
             }
@@ -941,11 +1002,7 @@ class TaskViewModel(
 
     fun disconnectGoogleDrive() {
         viewModelScope.launch {
-            try {
-                driveBackupManager.getGoogleSignInClient().signOut()
-            } catch (_: Exception) {
-            }
-            driveBackupManager.setSyncConflictPending(false)
+            driveBackupManager.disconnect()
             refreshDriveState(message = "Disconnected from Google Drive")
         }
     }

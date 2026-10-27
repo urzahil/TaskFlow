@@ -7,7 +7,8 @@ plugins {
 
 android {
     namespace = "rocks.urzahil.taskflow"
-    compileSdk { version = release(36) { minorApiLevel = 1 } }
+    // The current AndroidX libraries require compiling against API 37; targetSdk stays separate.
+    compileSdk { version = release(37) { minorApiLevel = 2 } }
 
     defaultConfig {
         applicationId = "rocks.urzahil.taskflow"
@@ -85,6 +86,7 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.play.services.auth)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.okhttp)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.androidx.core)

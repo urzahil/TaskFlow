@@ -1,13 +1,7 @@
 package rocks.urzahil.taskflow.data.drive
 
-import android.content.Context
 import android.util.Log
-import com.google.android.gms.auth.GoogleAuthUtil
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.Scope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -15,8 +9,10 @@ import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 data class DriveBackupInfo(
@@ -24,7 +20,15 @@ data class DriveBackupInfo(
     val modifiedTime: String
 )
 
-class GoogleDriveService(private val context: Context) {
+/** Drive no longer accepts TaskFlow's access for the connected account; the user must reconnect. */
+class DriveAccessLostException :
+    IllegalStateException("Google Drive access was removed. Reconnect Google Drive in Settings.")
+
+/**
+ * Talks to the Drive REST API inside the app-data folder. Every call is made for an explicit
+ * account and gets its access token from [authorization].
+ */
+class GoogleDriveService(private val authorization: DriveAuthorization) {
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -35,206 +39,168 @@ class GoogleDriveService(private val context: Context) {
     companion object {
         private const val TAG = "GoogleDriveService"
         const val BACKUP_FILENAME = "taskflow_backup.json"
-        val SCOPE_FILE = Scope("https://www.googleapis.com/auth/drive.file")
-        val SCOPE_APPDATA = Scope("https://www.googleapis.com/auth/drive.appdata")
-        private const val OAUTH_SCOPE_STRING =
-            "oauth2:https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata"
+        private const val FILES_URL = "https://www.googleapis.com/drive/v3/files"
+        private const val UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files"
+        private val JSON = "application/json; charset=utf-8".toMediaType()
     }
 
-    fun getGoogleSignInClient(): GoogleSignInClient {
-        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
-            .requestScopes(SCOPE_FILE, SCOPE_APPDATA)
-            .build()
-        return GoogleSignIn.getClient(context, gso)
-    }
+    /** Holds one operation's access token, so a multi-request operation asks for it once. */
+    private inner class Session(private val accountEmail: String) {
+        private var token: String? = null
 
-    fun getSignedInAccount(): GoogleSignInAccount? {
-        val account = GoogleSignIn.getLastSignedInAccount(context)
-        return if (account != null && GoogleSignIn.hasPermissions(
-                account,
-                SCOPE_FILE,
-                SCOPE_APPDATA
-            )
-        ) {
-            account
-        } else {
-            null
+        suspend fun token(): String = token ?: requestToken().also { token = it }
+
+        /** Forgets a token Drive rejected; the next [token] call fetches a new one. */
+        suspend fun discardToken() {
+            token?.let { runCatching { authorization.clearToken(it) } }
+            token = null
         }
-    }
 
-    suspend fun getAccessToken(): String? = withContext(Dispatchers.IO) {
-        val account = GoogleSignIn.getLastSignedInAccount(context) ?: return@withContext null
-        try {
-            val androidAccount = account.account ?: return@withContext null
-            GoogleAuthUtil.getToken(context, androidAccount, OAUTH_SCOPE_STRING)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error getting OAuth access token: ${e.message}", e)
-            null
+        private suspend fun requestToken(): String =
+            when (val outcome = authorization.authorize(accountEmail)) {
+                is DriveAuthorizationOutcome.Granted -> outcome.accessToken
+                is DriveAuthorizationOutcome.NeedsUserConsent -> throw DriveAccessLostException()
+            }
+
+        /** Runs a request, retrying once with a fresh token if Drive answers 401. */
+        suspend fun <T> execute(build: Request.Builder.() -> Unit, handle: (Response) -> T): T {
+            for (attempt in 0..1) {
+                val request = Request.Builder()
+                    .header("Authorization", "Bearer ${token()}")
+                    .apply(build)
+                    .build()
+                val response = httpClient.newCall(request).execute()
+                if (response.code == 401 && attempt == 0) {
+                    response.close()
+                    discardToken()
+                    continue
+                }
+                return response.use(handle)
+            }
+            throw IllegalStateException("Unreachable")
         }
     }
 
     /**
-     * Finds existing backup file metadata in Google Drive appDataFolder
+     * Email address of the account [accessToken] belongs to. Used when Play Services does not
+     * report it alongside the grant.
      */
-    suspend fun findBackupFile(): DriveBackupInfo? {
-        val token = getAccessToken() ?: return null
-        return findBackupFile(token)
+    suspend fun fetchAccountEmail(accessToken: String): String? = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)")
+            .header("Authorization", "Bearer $accessToken")
+            .build()
+        try {
+            httpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext null
+                JSONObject(response.body.string()).optJSONObject("user")
+                    ?.optString("emailAddress")?.takeIf { it.isNotBlank() }
+            }
+        } catch (e: IOException) {
+            Log.w(TAG, "Could not read the Drive account email", e)
+            null
+        }
     }
 
-    private suspend fun findBackupFile(token: String): DriveBackupInfo? = withContext(Dispatchers.IO) {
+    /** Finds the backup's metadata, or null when there is none or Drive could not be reached. */
+    suspend fun findBackupFile(accountEmail: String): DriveBackupInfo? = withContext(Dispatchers.IO) {
         try {
-            val url = "https://www.googleapis.com/drive/v3/files" +
-                    "?spaces=appDataFolder" +
-                    "&q=name='$BACKUP_FILENAME' and trashed=false" +
-                    "&fields=files(id,name,modifiedTime,size)"
-
-            val request = Request.Builder()
-                .url(url)
-                .addHeader("Authorization", "Bearer $token")
-                .get()
-                .build()
-
-            httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    Log.e(TAG, "Failed searching backup file: code ${response.code}")
-                    return@withContext null
-                }
-                val body = response.body?.string() ?: return@withContext null
-                val json = JSONObject(body)
-                val files = json.optJSONArray("files") ?: return@withContext null
-                if (files.length() > 0) {
-                    val fileObj = files.getJSONObject(0)
-                    val id = fileObj.getString("id")
-                    val modified = fileObj.optString("modifiedTime", "")
-                    return@withContext DriveBackupInfo(
-                        fileId = id,
-                        modifiedTime = modified
-                    )
-                }
-            }
+            Session(accountEmail).lookUpBackupFile()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Error finding backup file: ${e.message}", e)
+            null
         }
-        null
     }
 
-    /**
-     * Uploads tasks backup to Google Drive appDataFolder
-     */
-    suspend fun uploadBackup(tasksJson: String): Result<DriveBackupInfo> =
+    /** Throws when the lookup fails, so callers never mistake an error for "no backup yet". */
+    private suspend fun Session.lookUpBackupFile(): DriveBackupInfo? = execute(
+        build = {
+            url(
+                "$FILES_URL?spaces=appDataFolder" +
+                    "&q=name='$BACKUP_FILENAME' and trashed=false" +
+                    "&orderBy=modifiedTime desc" +
+                    "&fields=files(id,modifiedTime)"
+            )
+        }
+    ) { response ->
+        if (!response.isSuccessful) throw IOException("Failed searching backup file: ${response.code}")
+        val files = JSONObject(response.body.string()).optJSONArray("files")
+        if (files == null || files.length() == 0) return@execute null
+        val file = files.getJSONObject(0)
+        DriveBackupInfo(fileId = file.getString("id"), modifiedTime = file.optString("modifiedTime", ""))
+    }
+
+    /** Uploads the backup to the app-data folder, replacing the existing backup file if there is one. */
+    suspend fun uploadBackup(accountEmail: String, tasksJson: String): Result<DriveBackupInfo> =
         withContext(Dispatchers.IO) {
-            val token = getAccessToken()
-                ?: return@withContext Result.failure(Exception("Not signed in or missing Drive permission"))
-
-            val existingFile = findBackupFile(token)
             try {
-                if (existingFile != null) {
-                    // Update existing file content
-                    val updateUrl =
-                        "https://www.googleapis.com/upload/drive/v3/files/${existingFile.fileId}?uploadType=media"
-                    val body =
-                        tasksJson.toRequestBody("application/json; charset=utf-8".toMediaType())
-
-                    val request = Request.Builder()
-                        .url(updateUrl)
-                        .addHeader("Authorization", "Bearer $token")
-                        .patch(body)
-                        .build()
-
-                    httpClient.newCall(request).execute().use { response ->
-                        if (!response.isSuccessful) {
-                            return@withContext Result.failure(Exception("Failed updating backup: ${response.code}"))
+                val session = Session(accountEmail)
+                val existingFile = session.lookUpBackupFile()
+                val info = if (existingFile != null) {
+                    session.execute(
+                        build = {
+                            url("$UPLOAD_URL/${existingFile.fileId}?uploadType=media")
+                            patch(tasksJson.toRequestBody(JSON))
                         }
-                        val respBody = response.body?.string() ?: ""
-                        val json = JSONObject(respBody)
-                        val id = json.optString("id", existingFile.fileId)
-                        Result.success(
-                            DriveBackupInfo(
-                                fileId = id,
-                                modifiedTime = json.optString("modifiedTime", "")
-                            )
+                    ) { response ->
+                        if (!response.isSuccessful) throw IOException("Failed updating backup: ${response.code}")
+                        val json = JSONObject(response.body.string())
+                        DriveBackupInfo(
+                            fileId = json.optString("id", existingFile.fileId),
+                            modifiedTime = json.optString("modifiedTime", "")
                         )
                     }
                 } else {
-                    // Create new multipart file in appDataFolder
-                    val uploadUrl =
-                        "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
-
                     val metadataJson = JSONObject().apply {
                         put("name", BACKUP_FILENAME)
                         put("parents", JSONArray().put("appDataFolder"))
                     }.toString()
-
                     val multipartBody = MultipartBody.Builder()
                         .setType(MultipartBody.FORM)
-                        .addFormDataPart(
-                            "metadata",
-                            null,
-                            metadataJson.toRequestBody("application/json; charset=UTF-8".toMediaType())
-                        )
-                        .addFormDataPart(
-                            "file",
-                            BACKUP_FILENAME,
-                            tasksJson.toRequestBody("application/json; charset=UTF-8".toMediaType())
-                        )
+                        .addFormDataPart("metadata", null, metadataJson.toRequestBody(JSON))
+                        .addFormDataPart("file", BACKUP_FILENAME, tasksJson.toRequestBody(JSON))
                         .build()
-
-                    val request = Request.Builder()
-                        .url(uploadUrl)
-                        .addHeader("Authorization", "Bearer $token")
-                        .post(multipartBody)
-                        .build()
-
-                    httpClient.newCall(request).execute().use { response ->
-                        if (!response.isSuccessful) {
-                            return@withContext Result.failure(Exception("Failed creating backup: ${response.code}"))
+                    session.execute(
+                        build = {
+                            url("$UPLOAD_URL?uploadType=multipart")
+                            post(multipartBody)
                         }
-                        val respBody = response.body?.string() ?: ""
-                        val json = JSONObject(respBody)
-                        val id = json.optString("id", "")
-                        Result.success(
-                            DriveBackupInfo(
-                                fileId = id,
-                                modifiedTime = json.optString("modifiedTime", "")
-                            )
+                    ) { response ->
+                        if (!response.isSuccessful) throw IOException("Failed creating backup: ${response.code}")
+                        val json = JSONObject(response.body.string())
+                        DriveBackupInfo(
+                            fileId = json.optString("id", ""),
+                            modifiedTime = json.optString("modifiedTime", "")
                         )
                     }
                 }
+                Result.success(info)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Error uploading backup: ${e.message}", e)
                 Result.failure(e)
             }
         }
 
-    /**
-     * Downloads tasks backup from Google Drive
-     */
-    suspend fun downloadBackup(): Result<String> = withContext(Dispatchers.IO) {
-        val token = getAccessToken()
-            ?: return@withContext Result.failure(Exception("Not signed in or missing Drive permission"))
-
-        val existingFile = findBackupFile(token)
-            ?: return@withContext Result.failure(Exception("No backup file found in Google Drive"))
-
+    /** Downloads the backup JSON from the app-data folder. */
+    suspend fun downloadBackup(accountEmail: String): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val downloadUrl =
-                "https://www.googleapis.com/drive/v3/files/${existingFile.fileId}?alt=media"
-            val request = Request.Builder()
-                .url(downloadUrl)
-                .addHeader("Authorization", "Bearer $token")
-                .get()
-                .build()
-
-            httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    return@withContext Result.failure(Exception("Failed downloading backup: ${response.code}"))
-                }
+            val session = Session(accountEmail)
+            val existingFile = session.lookUpBackupFile()
+                ?: return@withContext Result.failure(Exception("No backup file found in Google Drive"))
+            val content = session.execute(
+                build = { url("$FILES_URL/${existingFile.fileId}?alt=media") }
+            ) { response ->
+                if (!response.isSuccessful) throw IOException("Failed downloading backup: ${response.code}")
                 // Bounded read: a corrupt or hostile Drive file must not exhaust memory.
-                val content = response.body?.byteStream()?.let { BackupFileReader.readJson(it) }
-                    ?: return@withContext Result.failure(Exception("Empty backup content"))
-                Result.success(content)
+                BackupFileReader.readJson(response.body.byteStream())
             }
+            Result.success(content)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Error downloading backup: ${e.message}", e)
             Result.failure(e)

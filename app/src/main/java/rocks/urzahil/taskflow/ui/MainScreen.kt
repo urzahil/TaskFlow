@@ -3,6 +3,7 @@ package rocks.urzahil.taskflow.ui
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Box
@@ -37,8 +38,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -66,9 +67,6 @@ import rocks.urzahil.taskflow.ui.list.ListView
 import rocks.urzahil.taskflow.ui.model.ViewMode
 import rocks.urzahil.taskflow.ui.monthly.MonthlyView
 import rocks.urzahil.taskflow.ui.settings.SettingsScreen
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.common.api.CommonStatusCodes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -147,28 +145,16 @@ fun MainScreen(
         }
     }
 
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
+    // Google's account picker / Drive consent screen, shown when connecting needs the user.
+    val driveConsentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
-        try {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-            val account = task.getResult(ApiException::class.java)
-            if (account != null) {
-                viewModel.onGoogleSignInSuccess(account)
-            } else {
-                viewModel.refreshDriveState("Google Sign-In was not completed", isError = true)
-            }
-        } catch (e: Exception) {
-            val statusCode = (e as? ApiException)?.statusCode
-            if (statusCode == 10 || statusCode == CommonStatusCodes.DEVELOPER_ERROR) {
-                viewModel.setShowGoogleError10Dialog(true)
-                viewModel.refreshDriveState(
-                    "Google Sign-In Error 10: OAuth Client ID setup required",
-                    isError = true
-                )
-            } else {
-                viewModel.refreshDriveState("Sign-In error: ${e.message}", isError = true)
-            }
+        viewModel.onDriveConsentResult(result.resultCode, result.data)
+    }
+
+    LaunchedEffect(viewModel) {
+        viewModel.driveConsentRequests.collect { pendingIntent ->
+            driveConsentLauncher.launch(IntentSenderRequest.Builder(pendingIntent).build())
         }
     }
 
@@ -375,7 +361,7 @@ fun MainScreen(
                         if (availableTabs.size > 1) {
                             val selectedTabIndex =
                                 availableTabs.indexOfFirst { it.first == viewMode }.coerceAtLeast(0)
-                            TabRow(
+                            SecondaryTabRow(
                                 selectedTabIndex = selectedTabIndex,
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                                 contentColor = MaterialTheme.colorScheme.primary,
@@ -504,11 +490,7 @@ fun MainScreen(
                         onToggleRolloverCleanupEnabled = { viewModel.setRolloverCleanupEnabled(it) },
                         lastRolloverInfo = lastRolloverInfo,
                         driveSyncState = driveSyncState,
-                        onConnectDrive = {
-                            googleSignInLauncher.launch(
-                                viewModel.driveBackupManager.getGoogleSignInClient().signInIntent
-                            )
-                        },
+                        onConnectDrive = { viewModel.connectGoogleDrive() },
                         onDisconnectDrive = {
                             viewModel.disconnectGoogleDrive()
                         },

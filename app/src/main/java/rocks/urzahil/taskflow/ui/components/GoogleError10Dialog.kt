@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import rocks.urzahil.taskflow.data.drive.DRIVE_APPDATA_SCOPE
 import rocks.urzahil.taskflow.data.drive.GoogleOAuthHelper
 
 @Composable
@@ -78,9 +79,8 @@ fun GoogleError10Dialog(
             appendLine(sha1)
             appendLine("SHA-256 Certificate Fingerprint:")
             appendLine(sha256)
-            appendLine("Scopes Required:")
-            appendLine("https://www.googleapis.com/auth/drive.file")
-            appendLine("https://www.googleapis.com/auth/drive.appdata")
+            appendLine("Scope Required:")
+            appendLine(DRIVE_APPDATA_SCOPE.scopeUri)
         }
         copyToClipboard("All Setup Details", allText)
     }
