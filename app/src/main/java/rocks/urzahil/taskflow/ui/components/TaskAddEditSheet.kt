@@ -23,13 +23,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.MedicalServices
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -80,20 +74,10 @@ import rocks.urzahil.taskflow.ui.model.CategoryIcons
 import kotlinx.coroutines.delay
 import java.util.Calendar
 
-data class CategoryOption(
+private data class CategoryOption(
     val name: String,
     val icon: ImageVector,
     val color: Long
-)
-
-val CATEGORIES = listOf(
-    CategoryOption("General", Icons.Default.CalendarMonth, 0xFF3B82F6),
-    CategoryOption("Work", Icons.Default.Work, 0xFF2563EB),
-    CategoryOption("Personal", Icons.Default.Person, 0xFF8B5CF6),
-    CategoryOption("Health", Icons.Default.MedicalServices, 0xFF10B981),
-    CategoryOption("Fitness", Icons.Default.FitnessCenter, 0xFFF59E0B),
-    CategoryOption("Home", Icons.Default.Home, 0xFF059669),
-    CategoryOption("Study", Icons.Default.School, 0xFF6366F1)
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -128,24 +112,26 @@ fun TaskAddEditSheet(
         }
     }
 
-    // Derived category options from availableCategories or fallback
+    // Every install starts with the starter categories, so these are always real, editable ones.
     val categoryOptions = remember(availableCategories) {
-        if (availableCategories.isNotEmpty()) {
-            availableCategories.map {
-                CategoryOption(
-                    name = it.name,
-                    icon = CategoryIcons.getIcon(it.iconName),
-                    color = it.colorHex
-                )
-            }
-        } else {
-            CATEGORIES
+        availableCategories.map {
+            CategoryOption(
+                name = it.name,
+                icon = CategoryIcons.getIcon(it.iconName),
+                color = it.colorHex
+            )
         }
     }
 
     var title by remember { mutableStateOf(existingTask?.title ?: "") }
     var description by remember { mutableStateOf(existingTask?.description ?: "") }
-    var selectedCategory by remember { mutableStateOf(existingTask?.category ?: "General") }
+    var selectedCategory by remember {
+        mutableStateOf(
+            existingTask?.category
+                ?: availableCategories.firstOrNull { it.isDefault }?.name
+                ?: "General"
+        )
+    }
     var selectedColor by remember {
         mutableStateOf(
             existingTask?.colorHex

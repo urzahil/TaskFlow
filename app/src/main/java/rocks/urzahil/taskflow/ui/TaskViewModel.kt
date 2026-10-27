@@ -292,13 +292,11 @@ class TaskViewModel(
 
     init {
         viewModelScope.launch {
+            // First, so the starter categories are there before anything else can be slow.
+            repository.seedInitialCategoriesIfEmpty()
+
             // Keep users connected across the move off the removed GoogleSignIn API.
             driveBackupManager.migrateLegacySignIn()
-
-            val currentCategories = repository.allCategories.first()
-            if (currentCategories.isEmpty()) {
-                repository.seedInitialCategoriesIfEmpty()
-            }
 
             // On app installation: auto-restore from Google Drive if a backup exists
             val restoredResult = driveBackupManager.checkAndAutoRestoreOnInstall()

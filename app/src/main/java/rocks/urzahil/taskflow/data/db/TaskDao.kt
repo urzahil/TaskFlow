@@ -84,6 +84,17 @@ interface TaskDao {
     @Query("DELETE FROM categories WHERE name = :name")
     suspend fun deleteCategoryByName(name: String)
 
+    @Query("SELECT COUNT(*) FROM categories")
+    suspend fun getCategoryCount(): Int
+
+    /** Inserts [categories] only when there are none yet. Returns true if it inserted them. */
+    @Transaction
+    suspend fun insertCategoriesIfEmpty(categories: List<CategoryEntity>): Boolean {
+        if (getCategoryCount() > 0) return false
+        insertCategories(categories)
+        return true
+    }
+
     @Query("SELECT * FROM categories WHERE name = :name COLLATE NOCASE LIMIT 1")
     suspend fun findCategoryIgnoreCase(name: String): CategoryEntity?
 
