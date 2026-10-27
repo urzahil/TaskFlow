@@ -14,9 +14,9 @@ android {
         applicationId = "rocks.urzahil.taskflow"
         minSdk = 24
         targetSdk = 36
-        // Must stay above every published build (34 was released) or updates are rejected.
-        versionCode = 35
-        versionName = "2.13.0"
+        // Must increase with every APK handed out, or installs refuse it as an update.
+        versionCode = 36
+        versionName = "2.14.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
