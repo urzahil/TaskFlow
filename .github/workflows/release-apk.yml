@@ -1,4 +1,4 @@
-name: Build TaskFlow Release APK
+name: Build TaskFlow Release APK and AAB
 
 on:
   workflow_dispatch:
@@ -48,15 +48,15 @@ jobs:
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.p12"
           test -s "$RUNNER_TEMP/release.p12"
 
-      - name: Build signed release APK
+      - name: Build signed release APK and AAB
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/release.p12
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew clean testDebugUnitTest assembleRelease --no-daemon
+        run: ./gradlew clean testDebugUnitTest assembleRelease bundleRelease --no-daemon
 
-      - name: Prepare release APK
+      - name: Prepare release APK and AAB
         run: |
           set -eu
           mkdir -p dist
@@ -64,12 +64,24 @@ jobs:
           test -n "$apk_path" || { echo "No release APK was produced"; exit 1; }
           cp "$apk_path" dist/TaskFlow-release.apk
           test -s dist/TaskFlow-release.apk
+          aab_path="$(find app/build/outputs/bundle/release -maxdepth 1 -type f -name '*.aab' -print -quit)"
+          test -n "$aab_path" || { echo "No release AAB was produced"; exit 1; }
+          cp "$aab_path" dist/TaskFlow-release.aab
+          test -s dist/TaskFlow-release.aab
 
       - name: Upload release APK artifact
         uses: actions/upload-artifact@v7
         with:
           name: TaskFlow-release-${{ github.run_number }}
           path: dist/TaskFlow-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Google Play AAB artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: TaskFlow-play-aab-${{ github.run_number }}
+          path: dist/TaskFlow-release.aab
           if-no-files-found: error
           retention-days: 30
 
@@ -80,5 +92,6 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             dist/TaskFlow-release.apk \
+            dist/TaskFlow-release.aab \
             --generate-notes \
             --title "$GITHUB_REF_NAME"
