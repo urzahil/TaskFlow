@@ -933,7 +933,7 @@ class TaskViewModel(
         // A failed consent screen also returns a non-OK result, but its data still carries Google's
         // status code (such as sign-in error 10); only a result without data is a plain cancel.
         if (resultCode != Activity.RESULT_OK && data == null) {
-            refreshDriveState("Google Drive was not connected", isError = true)
+            refreshDriveState("Google Drive was not connected (sign-in closed, code $resultCode)", isError = true)
             return
         }
         viewModelScope.launch {
@@ -950,7 +950,7 @@ class TaskViewModel(
     private fun onDriveConnectFailed(e: Exception) {
         val statusCode = (e as? ApiException)?.statusCode
         if (statusCode == CommonStatusCodes.CANCELED) {
-            refreshDriveState("Google Drive was not connected", isError = true)
+            refreshDriveState("Google Drive was not connected (Google: ${e.message})", isError = true)
         } else if (statusCode == CommonStatusCodes.DEVELOPER_ERROR) {
             // The app's signing key is not registered with an OAuth client (sign-in error 10).
             setShowGoogleError10Dialog(true)
