@@ -930,7 +930,9 @@ class TaskViewModel(
 
     /** Handles the result of the consent screen requested through [driveConsentRequests]. */
     fun onDriveConsentResult(resultCode: Int, data: Intent?) {
-        if (resultCode != Activity.RESULT_OK) {
+        // A failed consent screen also returns a non-OK result, but its data still carries Google's
+        // status code (such as sign-in error 10); only a result without data is a plain cancel.
+        if (resultCode != Activity.RESULT_OK && data == null) {
             refreshDriveState("Google Drive was not connected", isError = true)
             return
         }
@@ -946,7 +948,10 @@ class TaskViewModel(
     }
 
     private fun onDriveConnectFailed(e: Exception) {
-        if ((e as? ApiException)?.statusCode == CommonStatusCodes.DEVELOPER_ERROR) {
+        val statusCode = (e as? ApiException)?.statusCode
+        if (statusCode == CommonStatusCodes.CANCELED) {
+            refreshDriveState("Google Drive was not connected", isError = true)
+        } else if (statusCode == CommonStatusCodes.DEVELOPER_ERROR) {
             // The app's signing key is not registered with an OAuth client (sign-in error 10).
             setShowGoogleError10Dialog(true)
             refreshDriveState("Google sign-in error 10: OAuth client setup required", isError = true)
