@@ -1,6 +1,7 @@
 package rocks.urzahil.taskflow.ui.daily
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -25,6 +26,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,15 +60,21 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -73,6 +82,8 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import rocks.urzahil.taskflow.data.model.AppDate
 import rocks.urzahil.taskflow.data.model.TaskEntity
 import rocks.urzahil.taskflow.ui.DailyStats
@@ -540,6 +551,27 @@ fun TaskCardItem(
 
     val cardAlpha = if (taskItem.isCompleted) 0.75f else 1.0f
 
+    // When the user expands the subtasks, scroll the list so the whole card is visible,
+    // following the card as it grows. The extra bottom margin keeps it clear of the
+    // floating Add Task button (it matches the list's bottom content padding).
+    val subtasksVisibleState = remember { MutableTransitionState(!isSubtasksCollapsed) }
+    subtasksVisibleState.targetState = !isSubtasksCollapsed
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val coroutineScope = rememberCoroutineScope()
+    val revealBottomMarginPx = with(LocalDensity.current) { 80.dp.toPx() }
+    var revealOnExpand by remember { mutableStateOf(false) }
+    LaunchedEffect(revealOnExpand) {
+        if (revealOnExpand) {
+            snapshotFlow { subtasksVisibleState.targetState && subtasksVisibleState.isIdle }
+                .first { it }
+            revealOnExpand = false
+        }
+    }
+    val toggleSubtasksCollapsed = {
+        revealOnExpand = isSubtasksCollapsed
+        onToggleSubtasksCollapsed()
+    }
+
     Card(
         colors = CardDefaults.cardColors(
             containerColor = if (taskItem.isCompleted) {
@@ -552,6 +584,16 @@ fun TaskCardItem(
         border = cardBorder,
         modifier = modifier
             .fillMaxWidth()
+            .bringIntoViewRequester(bringIntoViewRequester)
+            .onSizeChanged { size ->
+                if (revealOnExpand) {
+                    coroutineScope.launch {
+                        bringIntoViewRequester.bringIntoView(
+                            Rect(0f, 0f, size.width.toFloat(), size.height + revealBottomMarginPx)
+                        )
+                    }
+                }
+            }
             .testTag("task_item_${task.id}")
     ) {
         Row(
@@ -626,7 +668,7 @@ fun TaskCardItem(
                 }
 
                 AnimatedVisibility(
-                    visible = !isSubtasksCollapsed,
+                    visibleState = subtasksVisibleState,
                     enter = expandVertically() + fadeIn(),
                     exit = shrinkVertically() + fadeOut()
                 ) {
@@ -702,114 +744,124 @@ fun TaskCardItem(
 
                 Spacer(modifier = Modifier.height(5.dp))
 
-                // Badges Row: Category, Priority, Recurrence
+                // Badges Row: Category, Priority, Recurrence, subtask progress, then the chevron.
+                // The badges get the leftover width so the chevron always keeps its full size.
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Category Badge
-                    Surface(
-                        color = Color(task.colorHex).copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(5.dp)
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
-                        Text(
-                            text = task.category,
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(task.colorHex)
-                        )
-                    }
-
-                    // Priority Badge
-                    Surface(
-                        color = priorityColor.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(5.dp)
-                    ) {
-                        Text(
-                            text = task.priority,
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = priorityColor
-                        )
-                    }
-
-                    // Recurring Badge (if recurring)
-                    if (task.isRecurring) {
+                        // Category Badge
                         Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                            color = Color(task.colorHex).copy(alpha = 0.12f),
                             shape = RoundedCornerShape(5.dp)
                         ) {
-                            Row(
+                            Text(
+                                text = task.category,
                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(task.colorHex)
+                            )
+                        }
+
+                        // Priority Badge
+                        Surface(
+                            color = priorityColor.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(5.dp)
+                        ) {
+                            Text(
+                                text = task.priority,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = priorityColor
+                            )
+                        }
+
+                        // Recurring Badge (if recurring). It is the one badge that shrinks
+                        // (ellipsized) when the row runs out of space.
+                        if (task.isRecurring) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                                shape = RoundedCornerShape(5.dp),
+                                modifier = Modifier.weight(1f, fill = false)
                             ) {
-                                Icon(
-                                    Icons.Default.Repeat,
-                                    contentDescription = "Recurring",
-                                    modifier = Modifier.size(11.dp),
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text(
-                                    text = formatRecurrenceLabel(task),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Repeat,
+                                        contentDescription = "Recurring",
+                                        modifier = Modifier.size(11.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = formatRecurrenceLabel(task),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+
+                        if (taskItem.subtasks.isNotEmpty()) {
+                            val doneCount = taskItem.subtasks.count { it.isChecked }
+                            val allDone = doneCount == taskItem.subtasks.size
+                            val progressColor = if (allDone) {
+                                CompletedGreen
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+
+                            // Subtask progress chip; tapping it also toggles the subtask list
+                            Surface(
+                                color = progressColor.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(5.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(5.dp))
+                                    .clickable { toggleSubtasksCollapsed() }
+                                    .testTag("subtask_progress_${task.id}")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Checklist,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(11.dp),
+                                        tint = progressColor
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "$doneCount/${taskItem.subtasks.size}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = progressColor
+                                    )
+                                }
                             }
                         }
                     }
 
                     if (taskItem.subtasks.isNotEmpty()) {
-                        val doneCount = taskItem.subtasks.count { it.isChecked }
-                        val allDone = doneCount == taskItem.subtasks.size
-                        val progressColor = if (allDone) {
-                            CompletedGreen
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-
-                        // Subtask progress chip; tapping it also toggles the subtask list
-                        Surface(
-                            color = progressColor.copy(alpha = 0.12f),
-                            shape = RoundedCornerShape(5.dp),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(5.dp))
-                                .clickable { onToggleSubtasksCollapsed() }
-                                .testTag("subtask_progress_${task.id}")
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.Checklist,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(11.dp),
-                                    tint = progressColor
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text(
-                                    text = "$doneCount/${taskItem.subtasks.size}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Medium,
-                                    color = progressColor
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.weight(1f))
-
                         // Collapse/expand chevron: points up while expanded, down while collapsed
                         val chevronRotation by animateFloatAsState(
                             targetValue = if (isSubtasksCollapsed) 180f else 0f,
                             label = "subtask_chevron"
                         )
                         IconButton(
-                            onClick = onToggleSubtasksCollapsed,
+                            onClick = toggleSubtasksCollapsed,
                             modifier = Modifier
                                 .size(24.dp)
                                 .testTag("subtask_toggle_${task.id}")
