@@ -147,6 +147,19 @@ fun TaskAddEditSheet(
         mutableStateListOf<SubtaskEntity>().apply { addAll(existingSubtasks) }
     }
     var sharedSubtasks by remember { mutableStateOf(existingTask?.sharedSubtasks ?: true) }
+    // Focus the newest subtask field right after "Add Subtask" is tapped.
+    val newSubtaskFocusRequester = remember { FocusRequester() }
+    var focusNewSubtask by remember { mutableStateOf(false) }
+    LaunchedEffect(subtasks.size) {
+        if (focusNewSubtask) {
+            focusNewSubtask = false
+            try {
+                newSubtaskFocusRequester.requestFocus()
+                keyboardController?.show()
+            } catch (_: Exception) {
+            }
+        }
+    }
 
     var isRecurring by remember { mutableStateOf(existingTask?.isRecurring ?: false) }
     var recurrenceDays by remember { mutableIntStateOf(existingTask?.recurrenceDays ?: 1) }
@@ -291,7 +304,15 @@ fun TaskAddEditSheet(
                             placeholder = { Text("Subtask") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .then(
+                                    if (index == subtasks.lastIndex) {
+                                        Modifier.focusRequester(newSubtaskFocusRequester)
+                                    } else {
+                                        Modifier
+                                    }
+                                ),
                             shape = RoundedCornerShape(12.dp)
                         )
                         IconButton(onClick = { subtasks.removeAt(index) }) {
@@ -301,7 +322,10 @@ fun TaskAddEditSheet(
                 }
 
                 TextButton(
-                    onClick = { subtasks.add(SubtaskEntity(taskId = existingTask?.id ?: 0, title = "")) }
+                    onClick = {
+                        focusNewSubtask = true
+                        subtasks.add(SubtaskEntity(taskId = existingTask?.id ?: 0, title = ""))
+                    }
                 ) {
                     Text("Add Subtask")
                 }
