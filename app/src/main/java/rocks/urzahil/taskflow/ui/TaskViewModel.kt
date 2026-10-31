@@ -771,7 +771,8 @@ class TaskViewModel(
     fun removeSubtask(taskItem: TaskItemUi, subtask: SubtaskItemUi) {
         viewModelScope.launch {
             repository.removeSubtaskOn(
-                taskItem.task.id, subtask.id, taskItem.date.toIsoString(), subtask.shared
+                taskItem.task.id, subtask.id, taskItem.date.toIsoString(),
+                subtask.shared && taskItem.task.isRecurring
             )
             triggerAutoBackup()
         }

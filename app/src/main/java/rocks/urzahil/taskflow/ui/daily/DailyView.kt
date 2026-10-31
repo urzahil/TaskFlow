@@ -657,18 +657,16 @@ fun TaskCardItem(
                                 .weight(1f)
                                 .clickable { onToggleSubtask(subtask) }
                         )
-                        if (task.isRecurring) {
-                            IconButton(
-                                onClick = { onRemoveSubtask(subtask) },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = "Remove subtask",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
+                        IconButton(
+                            onClick = { onRemoveSubtask(subtask) },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Remove subtask",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp)
+                            )
                         }
                     }
                 }

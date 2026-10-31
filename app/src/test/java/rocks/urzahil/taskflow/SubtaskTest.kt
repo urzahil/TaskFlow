@@ -245,6 +245,18 @@ class SubtaskTest {
     }
 
     @Test
+    fun removingASubtaskOnAOneTimeTaskDeletesIt() = runBlocking {
+        repository.insertTask(task(1))
+        val (a, b) = addSharedSubtasks(1, "A", "B")
+
+        repository.removeSubtaskOn(1, a.id, day1, shared = false)
+
+        assertFalse(repository.allSubtasks.first().any { it.id == a.id })
+        assertEquals(listOf(b.id), repository.allSubtasks.first().map { it.id })
+        assertTrue(repository.allSubtaskExclusions.first().isEmpty())
+    }
+
+    @Test
     fun addingToASharedRecurringTaskGoesOnThatDayOnly() = runBlocking {
         repository.insertTask(task(1, recurring = true))
         val (a) = addSharedSubtasks(1, "A")
