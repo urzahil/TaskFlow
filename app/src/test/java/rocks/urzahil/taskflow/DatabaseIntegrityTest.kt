@@ -128,7 +128,7 @@ class DatabaseIntegrityTest {
         FrameworkSQLiteOpenHelperFactory().create(config).writableDatabase.close()
 
         val migrated = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
-            .addMigrations(AppDatabase.MIGRATION_5_6)
+            .addMigrations(AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
             .allowMainThreadQueries()
             .build()
         try {

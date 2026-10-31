@@ -117,8 +117,8 @@ class RecurringOccurrenceExclusionTest {
         AppDatabase.MIGRATION_4_5.migrate(db)
         db.execSQL(
             "INSERT INTO tasks (id, title, description, category, priority, colorHex, isRecurring, " +
-                "recurrenceDays, startDate, createdAt) " +
-                "VALUES (902, 'Recurring', '', 'General', 'Medium', 1, 1, 1, '2026-10-01', 1)"
+                "recurrenceDays, startDate, sharedSubtasks, createdAt) " +
+                "VALUES (902, 'Recurring', '', 'General', 'Medium', 1, 1, 1, '2026-10-01', 1, 1)"
         )
 
         db.execSQL(
