@@ -4,6 +4,9 @@ import android.database.sqlite.SQLiteConstraintException
 import rocks.urzahil.taskflow.data.db.TaskDao
 import rocks.urzahil.taskflow.data.model.AppDate
 import rocks.urzahil.taskflow.data.model.CategoryEntity
+import rocks.urzahil.taskflow.data.model.SubtaskCompletionEntity
+import rocks.urzahil.taskflow.data.model.SubtaskEntity
+import rocks.urzahil.taskflow.data.model.SubtaskExclusionEntity
 import rocks.urzahil.taskflow.data.model.TaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.TaskEntity
 import rocks.urzahil.taskflow.data.model.TaskOccurrenceExclusionEntity
@@ -16,6 +19,11 @@ class TaskRepository(private val taskDao: TaskDao) {
     val allOccurrenceExclusions: Flow<List<TaskOccurrenceExclusionEntity>> =
         taskDao.getAllOccurrenceExclusions()
     val allCategories: Flow<List<CategoryEntity>> = taskDao.getAllCategories()
+    val allSubtasks: Flow<List<SubtaskEntity>> = taskDao.getAllSubtasks()
+    val allSubtaskCompletions: Flow<List<SubtaskCompletionEntity>> =
+        taskDao.getAllSubtaskCompletions()
+    val allSubtaskExclusions: Flow<List<SubtaskExclusionEntity>> =
+        taskDao.getAllSubtaskExclusions()
 
     suspend fun insertTask(task: TaskEntity): Long = taskDao.insertTask(task)
 
@@ -46,8 +54,14 @@ class TaskRepository(private val taskDao: TaskDao) {
         tasks: List<TaskEntity>,
         completions: List<TaskCompletionEntity>,
         categories: List<CategoryEntity>,
-        occurrenceExclusions: List<TaskOccurrenceExclusionEntity> = emptyList()
-    ) = taskDao.clearAndRestoreAll(tasks, completions, categories, occurrenceExclusions)
+        occurrenceExclusions: List<TaskOccurrenceExclusionEntity> = emptyList(),
+        subtasks: List<SubtaskEntity> = emptyList(),
+        subtaskCompletions: List<SubtaskCompletionEntity> = emptyList(),
+        subtaskExclusions: List<SubtaskExclusionEntity> = emptyList()
+    ) = taskDao.clearAndRestoreAll(
+        tasks, completions, categories, occurrenceExclusions, subtasks, subtaskCompletions,
+        subtaskExclusions
+    )
 
     suspend fun updateCategory(
         oldName: String,
@@ -81,6 +95,51 @@ class TaskRepository(private val taskDao: TaskDao) {
             } catch (_: SQLiteConstraintException) {
                 // The task was deleted (for example by rollover) while the toggle was in flight.
             }
+        }
+    }
+
+    suspend fun replaceSharedSubtasks(taskId: Long, subtasks: List<SubtaskEntity>) =
+        taskDao.replaceSharedSubtasks(taskId, subtasks, AppDate.today().toIsoString())
+
+    /**
+     * A one-time task's subtask is stored undated: rollover moves its start date, so a dated item
+     * would be lost.
+     */
+    suspend fun addOccurrenceSubtask(
+        taskId: Long,
+        dateIso: String,
+        title: String,
+        position: Int,
+        isRecurring: Boolean
+    ) {
+        try {
+            taskDao.addOccurrenceSubtask(
+                SubtaskEntity(
+                    taskId = taskId,
+                    date = if (isRecurring) dateIso else null,
+                    title = title,
+                    position = position
+                ),
+                dateIso
+            )
+        } catch (_: SQLiteConstraintException) {
+            // The task was deleted while the add was in flight.
+        }
+    }
+
+    suspend fun removeSubtaskOn(taskId: Long, subtaskId: Long, dateIso: String, shared: Boolean) {
+        try {
+            taskDao.removeSubtaskOn(taskId, subtaskId, dateIso, shared)
+        } catch (_: SQLiteConstraintException) {
+            // The task or subtask was deleted while the removal was in flight.
+        }
+    }
+
+    suspend fun toggleSubtask(taskId: Long, subtaskId: Long, dateIso: String) {
+        try {
+            taskDao.toggleSubtask(taskId, subtaskId, dateIso)
+        } catch (_: SQLiteConstraintException) {
+            // The task or subtask was deleted while the toggle was in flight.
         }
     }
 

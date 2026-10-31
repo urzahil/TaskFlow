@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import rocks.urzahil.taskflow.ui.model.SubtaskItemUi
 import rocks.urzahil.taskflow.ui.model.TaskItemUi
 
 /**
@@ -40,6 +41,7 @@ fun CompactTaskRow(
     taskItem: TaskItemUi,
     onToggle: () -> Unit,
     tagPrefix: String,
+    onToggleSubtask: (SubtaskItemUi) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -110,6 +112,56 @@ fun CompactTaskRow(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
+        }
+
+        taskItem.subtasks.forEach { subtask ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggleSubtask(subtask) }
+                    .padding(start = 40.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (subtask.isChecked) {
+                    Box(
+                        modifier = Modifier
+                            .size(14.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = "Completed",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(10.dp)
+                        )
+                    }
+                } else {
+                    Icon(
+                        Icons.Default.RadioButtonUnchecked,
+                        contentDescription = "Mark Complete",
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                Text(
+                    text = subtask.title,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                    textDecoration = if (subtask.isChecked) TextDecoration.LineThrough else TextDecoration.None,
+                    color = if (subtask.isChecked) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
     }
 }

@@ -51,6 +51,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -69,6 +70,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import rocks.urzahil.taskflow.data.model.AppDate
 import rocks.urzahil.taskflow.data.model.CategoryEntity
+import rocks.urzahil.taskflow.data.model.SubtaskEntity
 import rocks.urzahil.taskflow.data.model.TaskEntity
 import rocks.urzahil.taskflow.ui.model.CategoryIcons
 import kotlinx.coroutines.delay
@@ -86,9 +88,10 @@ fun TaskAddEditSheet(
     initialDate: AppDate,
     existingTask: TaskEntity?,
     onDismiss: () -> Unit,
-    onSave: (TaskEntity) -> Unit,
+    onSave: (TaskEntity, List<SubtaskEntity>) -> Unit,
     availableCategories: List<CategoryEntity> = emptyList(),
-    onDelete: ((TaskEntity) -> Unit)? = null
+    onDelete: ((TaskEntity) -> Unit)? = null,
+    existingSubtasks: List<SubtaskEntity> = emptyList()
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val titleFocusRequester = remember { FocusRequester() }
@@ -139,6 +142,11 @@ fun TaskAddEditSheet(
         )
     }
     var priority by remember { mutableStateOf(existingTask?.priority ?: "Medium") }
+
+    val subtasks = remember(existingSubtasks) {
+        mutableStateListOf<SubtaskEntity>().apply { addAll(existingSubtasks) }
+    }
+    var sharedSubtasks by remember { mutableStateOf(existingTask?.sharedSubtasks ?: true) }
 
     var isRecurring by remember { mutableStateOf(existingTask?.isRecurring ?: false) }
     var recurrenceDays by remember { mutableIntStateOf(existingTask?.recurrenceDays ?: 1) }
@@ -262,6 +270,42 @@ fun TaskAddEditSheet(
                     .testTag("task_description_input"),
                 shape = RoundedCornerShape(12.dp)
             )
+
+            // Subtasks (one-time tasks, and recurring tasks that share one list)
+            if (!isRecurring || sharedSubtasks) {
+                Text(
+                    text = "Subtasks",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                subtasks.forEachIndexed { index, subtask ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = subtask.title,
+                            onValueChange = { subtasks[index] = subtask.copy(title = it) },
+                            placeholder = { Text("Subtask") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        IconButton(onClick = { subtasks.removeAt(index) }) {
+                            Icon(Icons.Default.Close, contentDescription = "Remove subtask")
+                        }
+                    }
+                }
+
+                TextButton(
+                    onClick = { subtasks.add(SubtaskEntity(taskId = existingTask?.id ?: 0, title = "")) }
+                ) {
+                    Text("Add subtask")
+                }
+            }
 
             // Task Type: Simple vs Recurring
             Text(
@@ -663,6 +707,23 @@ fun TaskAddEditSheet(
                                 )
                             }
                         }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Same subtasks every occurrence",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Switch(
+                                checked = sharedSubtasks,
+                                onCheckedChange = { sharedSubtasks = it }
+                            )
+                        }
                     }
                 }
             }
@@ -774,9 +835,14 @@ fun TaskAddEditSheet(
                             } else 1,
                             recurrenceDaysOfWeek = if (isRecurring) selectedDaysString else null,
                             startDate = startDate.toIsoString(),
-                            endDate = if (isRecurring && hasEndDate) endDate.toIsoString() else null
+                            endDate = if (isRecurring && hasEndDate) endDate.toIsoString() else null,
+                            sharedSubtasks = !isRecurring || sharedSubtasks
                         )
-                        onSave(taskToSave)
+                        onSave(
+                            taskToSave,
+                            subtasks.filter { it.title.isNotBlank() }
+                                .map { it.copy(title = it.title.trim()) }
+                        )
                     },
                     enabled = title.isNotBlank() && !endsBeforeStart,
                     modifier = Modifier

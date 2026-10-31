@@ -8,13 +8,24 @@ import androidx.room.RoomDatabase.JournalMode
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import rocks.urzahil.taskflow.data.model.CategoryEntity
+import rocks.urzahil.taskflow.data.model.SubtaskCompletionEntity
+import rocks.urzahil.taskflow.data.model.SubtaskEntity
+import rocks.urzahil.taskflow.data.model.SubtaskExclusionEntity
 import rocks.urzahil.taskflow.data.model.TaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.TaskEntity
 import rocks.urzahil.taskflow.data.model.TaskOccurrenceExclusionEntity
 
 @Database(
-    entities = [TaskEntity::class, TaskCompletionEntity::class, CategoryEntity::class, TaskOccurrenceExclusionEntity::class],
-    version = 6,
+    entities = [
+        TaskEntity::class,
+        TaskCompletionEntity::class,
+        CategoryEntity::class,
+        TaskOccurrenceExclusionEntity::class,
+        SubtaskEntity::class,
+        SubtaskCompletionEntity::class,
+        SubtaskExclusionEntity::class
+    ],
+    version = 7,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -128,6 +139,48 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE tasks ADD COLUMN sharedSubtasks INTEGER NOT NULL DEFAULT 1"
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS subtasks (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        taskId INTEGER NOT NULL,
+                        date TEXT,
+                        title TEXT NOT NULL,
+                        position INTEGER NOT NULL,
+                        FOREIGN KEY (taskId) REFERENCES tasks(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_subtasks_taskId ON subtasks (taskId)")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS subtask_completions (
+                        subtaskId INTEGER NOT NULL,
+                        date TEXT NOT NULL,
+                        completedAt INTEGER NOT NULL,
+                        PRIMARY KEY (subtaskId, date),
+                        FOREIGN KEY (subtaskId) REFERENCES subtasks(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS subtask_exclusions (
+                        subtaskId INTEGER NOT NULL,
+                        date TEXT NOT NULL,
+                        PRIMARY KEY (subtaskId, date),
+                        FOREIGN KEY (subtaskId) REFERENCES subtasks(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -140,7 +193,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_2_3,
                         MIGRATION_3_4,
                         MIGRATION_4_5,
-                        MIGRATION_5_6
+                        MIGRATION_5_6,
+                        MIGRATION_6_7
                     )
                     // Keep the database a single self-contained file (no -wal/-shm) so Auto Backup
                     // can never capture an inconsistent set of files.
