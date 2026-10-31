@@ -1,6 +1,11 @@
 package rocks.urzahil.taskflow.ui.daily
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -29,9 +34,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Repeat
@@ -57,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -99,6 +107,8 @@ fun DailyView(
     showDailyProgress: Boolean = true,
     currentToday: AppDate = AppDate.today(),
     weekSummaries: Map<String, DaySummaryUi> = emptyMap(),
+    collapsedTaskIds: Set<Long> = emptySet(),
+    onToggleSubtasksCollapsed: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val today = currentToday
@@ -486,7 +496,9 @@ fun DailyView(
                     onDeleteOccurrence = { onDeleteOccurrence(taskItem) },
                     onToggleSubtask = { onToggleSubtask(taskItem, it) },
                     onAddSubtask = { onAddSubtask(taskItem, it) },
-                    onRemoveSubtask = { onRemoveSubtask(taskItem, it) }
+                    onRemoveSubtask = { onRemoveSubtask(taskItem, it) },
+                    isSubtasksCollapsed = taskItem.task.id in collapsedTaskIds,
+                    onToggleSubtasksCollapsed = { onToggleSubtasksCollapsed(taskItem.task.id) }
                 )
             }
         }
@@ -503,6 +515,8 @@ fun TaskCardItem(
     onToggleSubtask: (SubtaskItemUi) -> Unit = {},
     onAddSubtask: (String) -> Unit = {},
     onRemoveSubtask: (SubtaskItemUi) -> Unit = {},
+    isSubtasksCollapsed: Boolean = false,
+    onToggleSubtasksCollapsed: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val task = taskItem.task
@@ -610,70 +624,78 @@ fun TaskCardItem(
                     )
                 }
 
-                taskItem.subtasks.forEach { subtask ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(18.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (subtask.isChecked) MaterialTheme.colorScheme.primary else Color.Transparent
+                AnimatedVisibility(
+                    visible = !isSubtasksCollapsed,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Column {
+                        taskItem.subtasks.forEach { subtask ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (subtask.isChecked) MaterialTheme.colorScheme.primary else Color.Transparent
+                                        )
+                                        .clickable { onToggleSubtask(subtask) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (subtask.isChecked) {
+                                        Icon(
+                                            Icons.Default.Check,
+                                            contentDescription = "Completed",
+                                            tint = MaterialTheme.colorScheme.onPrimary,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Default.RadioButtonUnchecked,
+                                            contentDescription = "Mark Complete",
+                                            tint = MaterialTheme.colorScheme.outline,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = subtask.title,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    textDecoration = if (subtask.isChecked) TextDecoration.LineThrough else TextDecoration.None,
+                                    color = if (subtask.isChecked) {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { onToggleSubtask(subtask) }
                                 )
-                                .clickable { onToggleSubtask(subtask) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (subtask.isChecked) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = "Completed",
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                            } else {
-                                Icon(
-                                    Icons.Default.RadioButtonUnchecked,
-                                    contentDescription = "Mark Complete",
-                                    tint = MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                                IconButton(
+                                    onClick = { onRemoveSubtask(subtask) },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Remove subtask",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
                             }
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = subtask.title,
-                            style = MaterialTheme.typography.bodySmall,
-                            textDecoration = if (subtask.isChecked) TextDecoration.LineThrough else TextDecoration.None,
-                            color = if (subtask.isChecked) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { onToggleSubtask(subtask) }
-                        )
-                        IconButton(
-                            onClick = { onRemoveSubtask(subtask) },
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Remove subtask",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                    }
-                }
 
-                if (taskItem.subtasks.isNotEmpty()) {
-                    TextButton(onClick = { showAddSubtaskDialog = true }) {
-                        Text("Add Subtask", style = MaterialTheme.typography.labelMedium)
+                        if (taskItem.subtasks.isNotEmpty()) {
+                            TextButton(onClick = { showAddSubtaskDialog = true }) {
+                                Text("Add Subtask", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
                     }
                 }
 
@@ -737,6 +759,68 @@ fun TaskCardItem(
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                             }
+                        }
+                    }
+
+                    if (taskItem.subtasks.isNotEmpty()) {
+                        val doneCount = taskItem.subtasks.count { it.isChecked }
+                        val allDone = doneCount == taskItem.subtasks.size
+                        val progressColor = if (allDone) {
+                            CompletedGreen
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+
+                        // Subtask progress chip; tapping it also toggles the subtask list
+                        Surface(
+                            color = progressColor.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(5.dp),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(5.dp))
+                                .clickable { onToggleSubtasksCollapsed() }
+                                .testTag("subtask_progress_${task.id}")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Checklist,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(11.dp),
+                                    tint = progressColor
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "$doneCount/${taskItem.subtasks.size}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = progressColor
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        // Collapse/expand chevron: points up while expanded, down while collapsed
+                        val chevronRotation by animateFloatAsState(
+                            targetValue = if (isSubtasksCollapsed) 180f else 0f,
+                            label = "subtask_chevron"
+                        )
+                        IconButton(
+                            onClick = onToggleSubtasksCollapsed,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .testTag("subtask_toggle_${task.id}")
+                        ) {
+                            Icon(
+                                Icons.Default.KeyboardArrowUp,
+                                contentDescription = if (isSubtasksCollapsed) "Show subtasks" else "Hide subtasks",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .rotate(chevronRotation)
+                            )
                         }
                     }
                 }

@@ -95,6 +95,7 @@ class TaskViewModel(
         private const val KEY_LAST_ROLLOVER_TIMESTAMP = "last_rollover_timestamp"
         private const val KEY_LAST_AUTOMATIC_ROLLOVER_DATE = "last_automatic_rollover_date"
         private const val KEY_START_VIEW = "start_view_mode"
+        private const val KEY_COLLAPSED_SUBTASK_TASK_IDS = "collapsed_subtask_task_ids"
     }
 
     private val userPrefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -221,6 +222,33 @@ class TaskViewModel(
     fun setShowDailyProgress(show: Boolean) {
         _showDailyProgress.value = show
         userPrefs?.edit()?.putBoolean(KEY_SHOW_DAILY_PROGRESS, show)?.apply()
+    }
+
+    // Tasks whose subtasks are collapsed in the Daily view, keyed by task id so every
+    // occurrence of a recurring task shares the same state.
+    private val _collapsedSubtaskTaskIds = MutableStateFlow(
+        userPrefs?.getStringSet(KEY_COLLAPSED_SUBTASK_TASK_IDS, emptySet())
+            ?.mapNotNull { it.toLongOrNull() }
+            ?.toSet()
+            ?: emptySet()
+    )
+    val collapsedSubtaskTaskIds: StateFlow<Set<Long>> = _collapsedSubtaskTaskIds.asStateFlow()
+
+    fun toggleSubtasksCollapsed(taskId: Long) {
+        val current = _collapsedSubtaskTaskIds.value
+        setCollapsedSubtaskTaskIds(if (taskId in current) current - taskId else current + taskId)
+    }
+
+    private fun expandSubtasks(taskId: Long) {
+        val current = _collapsedSubtaskTaskIds.value
+        if (taskId in current) setCollapsedSubtaskTaskIds(current - taskId)
+    }
+
+    private fun setCollapsedSubtaskTaskIds(ids: Set<Long>) {
+        _collapsedSubtaskTaskIds.value = ids
+        userPrefs?.edit()
+            ?.putStringSet(KEY_COLLAPSED_SUBTASK_TASK_IDS, ids.map { it.toString() }.toSet())
+            ?.apply()
     }
 
     private val driveBackupMutex = Mutex()
@@ -747,6 +775,7 @@ class TaskViewModel(
 
     fun addOccurrenceSubtask(taskItem: TaskItemUi, title: String) {
         if (title.isBlank()) return
+        expandSubtasks(taskItem.task.id)
         viewModelScope.launch {
             repository.addOccurrenceSubtask(
                 taskId = taskItem.task.id,
@@ -786,6 +815,7 @@ class TaskViewModel(
     fun deleteTask(task: TaskEntity) {
         viewModelScope.launch {
             repository.deleteTask(task)
+            expandSubtasks(task.id)
             if (_editingTask.value?.id == task.id) {
                 closeAddEditDialog()
             }
