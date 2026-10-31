@@ -16,7 +16,7 @@ android {
         targetSdk = 36
         // Must increase with every APK handed out, or installs refuse it as an update.
         versionCode = 41
-        versionName = "2.15.2"
+        versionName = "2.15.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
