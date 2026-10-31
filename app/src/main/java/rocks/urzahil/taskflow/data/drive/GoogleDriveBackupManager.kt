@@ -7,6 +7,8 @@ import android.content.SharedPreferences
 import android.util.Log
 import rocks.urzahil.taskflow.data.model.AppDate
 import rocks.urzahil.taskflow.data.model.CategoryEntity
+import rocks.urzahil.taskflow.data.model.SubtaskCompletionEntity
+import rocks.urzahil.taskflow.data.model.SubtaskEntity
 import rocks.urzahil.taskflow.data.model.TaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.TaskEntity
 import rocks.urzahil.taskflow.data.model.TaskOccurrenceExclusionEntity
@@ -25,7 +27,9 @@ data class ParsedBackup(
     val tasks: List<TaskEntity>,
     val completions: List<TaskCompletionEntity>,
     val categories: List<CategoryEntity> = emptyList(),
-    val occurrenceExclusions: List<TaskOccurrenceExclusionEntity> = emptyList()
+    val occurrenceExclusions: List<TaskOccurrenceExclusionEntity> = emptyList(),
+    val subtasks: List<SubtaskEntity> = emptyList(),
+    val subtaskCompletions: List<SubtaskCompletionEntity> = emptyList()
 )
 
 data class RestoreResultData(
@@ -216,10 +220,12 @@ open class GoogleDriveBackupManager(
         tasks: List<TaskEntity>,
         completions: List<TaskCompletionEntity>,
         categories: List<CategoryEntity> = emptyList(),
-        exclusions: List<TaskOccurrenceExclusionEntity> = emptyList()
+        exclusions: List<TaskOccurrenceExclusionEntity> = emptyList(),
+        subtasks: List<SubtaskEntity> = emptyList(),
+        subtaskCompletions: List<SubtaskCompletionEntity> = emptyList()
     ): String {
         val root = JSONObject()
-        root.put("version", 3)
+        root.put("version", 4)
         root.put("app", "TaskFlow")
         root.put("timestamp", System.currentTimeMillis())
 
@@ -237,6 +243,7 @@ open class GoogleDriveBackupManager(
                 put("recurrenceDaysOfWeek", task.recurrenceDaysOfWeek ?: JSONObject.NULL)
                 put("startDate", task.startDate)
                 put("endDate", task.endDate ?: JSONObject.NULL)
+                put("sharedSubtasks", task.sharedSubtasks)
                 put("createdAt", task.createdAt)
             }
             tasksArray.put(taskObj)
@@ -263,6 +270,28 @@ open class GoogleDriveBackupManager(
         }
         root.put("recurringTaskExclusions", exclusionsArray)
 
+        val subtasksArray = JSONArray()
+        subtasks.forEach { subtask ->
+            subtasksArray.put(JSONObject().apply {
+                put("id", subtask.id)
+                put("taskId", subtask.taskId)
+                put("date", subtask.date ?: JSONObject.NULL)
+                put("title", subtask.title)
+                put("position", subtask.position)
+            })
+        }
+        root.put("subtasks", subtasksArray)
+
+        val subtaskCompletionsArray = JSONArray()
+        subtaskCompletions.forEach { comp ->
+            subtaskCompletionsArray.put(JSONObject().apply {
+                put("subtaskId", comp.subtaskId)
+                put("date", comp.date)
+                put("completedAt", comp.completedAt)
+            })
+        }
+        root.put("subtaskCompletions", subtaskCompletionsArray)
+
         val categoriesArray = JSONArray()
         categories.forEach { cat ->
             val catObj = JSONObject().apply {
@@ -286,12 +315,12 @@ open class GoogleDriveBackupManager(
         require(!root.has("app") || root.getString("app") == "TaskFlow") {
             "This file is not a TaskFlow backup"
         }
-        require(!root.has("version") || root.getInt("version") in 1..3) {
+        require(!root.has("version") || root.getInt("version") in 1..4) {
             "Unsupported backup version"
         }
         // Validate the complete input before the restore transaction can delete local data.
         require(root.optJSONArray("tasks") != null) { "Backup must contain a tasks array" }
-        for (key in listOf("completions", "categories")) {
+        for (key in listOf("completions", "categories", "subtasks", "subtaskCompletions")) {
             require(!root.has(key) || root.optJSONArray(key) != null) {
                 "Backup $key must be an array"
             }
@@ -328,6 +357,7 @@ open class GoogleDriveBackupManager(
                     recurrenceDaysOfWeek = sanitizedDaysOfWeek,
                     startDate = obj.optString("startDate", AppDate.today().toIsoString()),
                     endDate = endDate,
+                    sharedSubtasks = obj.optBoolean("sharedSubtasks", true),
                     createdAt = obj.optLong("createdAt", System.currentTimeMillis())
                 )
                 require(task.id > 0 && taskIds.add(task.id)) { "Invalid or duplicate task ID" }
@@ -380,6 +410,47 @@ open class GoogleDriveBackupManager(
             }
         }
 
+        val subtasks = mutableListOf<SubtaskEntity>()
+        val subtasksArray = root.optJSONArray("subtasks")
+        if (subtasksArray != null) {
+            for (i in 0 until subtasksArray.length()) {
+                val obj = subtasksArray.getJSONObject(i)
+                val date = if (obj.isNull("date")) null else obj.getString("date")
+                val subtask = SubtaskEntity(
+                    id = obj.getLong("id"),
+                    taskId = obj.getLong("taskId"),
+                    date = date,
+                    title = obj.getString("title"),
+                    position = obj.optInt("position", 0)
+                )
+                if (subtask.taskId !in taskIds) continue
+                require(date == null || AppDate.parseIso(date).toIsoString() == date) {
+                    "Invalid subtask date"
+                }
+                subtasks.add(subtask)
+            }
+            require(subtasks.map { it.id }.toSet().size == subtasks.size) { "Duplicate subtask ID" }
+        }
+
+        val subtaskIds = subtasks.mapTo(HashSet()) { it.id }
+        val subtaskCompletions = mutableListOf<SubtaskCompletionEntity>()
+        val subtaskCompsArray = root.optJSONArray("subtaskCompletions")
+        if (subtaskCompsArray != null) {
+            for (i in 0 until subtaskCompsArray.length()) {
+                val obj = subtaskCompsArray.getJSONObject(i)
+                val comp = SubtaskCompletionEntity(
+                    subtaskId = obj.getLong("subtaskId"),
+                    date = obj.getString("date"),
+                    completedAt = obj.optLong("completedAt", System.currentTimeMillis())
+                )
+                if (comp.subtaskId !in subtaskIds) continue
+                require(
+                    AppDate.parseIso(comp.date).toIsoString() == comp.date
+                ) { "Invalid subtask completion date" }
+                subtaskCompletions.add(comp)
+            }
+        }
+
         val categoriesArray = root.optJSONArray("categories")
         if (categoriesArray != null && categoriesArray.length() > 0) {
             for (i in 0 until categoriesArray.length()) {
@@ -429,7 +500,7 @@ open class GoogleDriveBackupManager(
             }
         }
 
-        return ParsedBackup(tasks, completions, categories, exclusions)
+        return ParsedBackup(tasks, completions, categories, exclusions, subtasks, subtaskCompletions)
     }
 
     /**
@@ -439,10 +510,14 @@ open class GoogleDriveBackupManager(
         tasks: List<TaskEntity>,
         completions: List<TaskCompletionEntity>,
         categories: List<CategoryEntity> = emptyList(),
-        exclusions: List<TaskOccurrenceExclusionEntity> = emptyList()
+        exclusions: List<TaskOccurrenceExclusionEntity> = emptyList(),
+        subtasks: List<SubtaskEntity> = emptyList(),
+        subtaskCompletions: List<SubtaskCompletionEntity> = emptyList()
     ): Result<DriveBackupInfo> = withContext(Dispatchers.IO) {
         val email = getConnectedAccountEmail() ?: return@withContext Result.failure(notConnected())
-        val json = exportBackupJson(tasks, completions, categories, exclusions)
+        val json = exportBackupJson(
+            tasks, completions, categories, exclusions, subtasks, subtaskCompletions
+        )
         val result = driveService.uploadBackup(email, json).forgetConnectionIfAccessLost()
         result.onSuccess {
             setSyncConflictPending(false)
@@ -475,7 +550,9 @@ open class GoogleDriveBackupManager(
                 tasks = parsed.tasks,
                 completions = parsed.completions,
                 categories = parsed.categories,
-                occurrenceExclusions = parsed.occurrenceExclusions
+                occurrenceExclusions = parsed.occurrenceExclusions,
+                subtasks = parsed.subtasks,
+                subtaskCompletions = parsed.subtaskCompletions
             )
             prefs.edit()
                 .putLong(KEY_LAST_BACKUP_TIME, System.currentTimeMillis())
@@ -505,7 +582,9 @@ open class GoogleDriveBackupManager(
                     tasks = parsed.tasks,
                     completions = parsed.completions,
                     categories = parsed.categories,
-                    occurrenceExclusions = parsed.occurrenceExclusions
+                    occurrenceExclusions = parsed.occurrenceExclusions,
+                    subtasks = parsed.subtasks,
+                    subtaskCompletions = parsed.subtaskCompletions
                 )
                 prefs.edit()
                     .putLong(KEY_LAST_BACKUP_TIME, System.currentTimeMillis())

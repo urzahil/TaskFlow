@@ -6,7 +6,14 @@ import rocks.urzahil.taskflow.data.model.TaskEntity
 data class TaskItemUi(
     val task: TaskEntity,
     val date: AppDate,
-    val isCompleted: Boolean
+    val isCompleted: Boolean,
+    val subtasks: List<SubtaskItemUi> = emptyList()
+)
+
+data class SubtaskItemUi(
+    val id: Long,
+    val title: String,
+    val isChecked: Boolean
 )
 
 data class DaySummaryUi(
