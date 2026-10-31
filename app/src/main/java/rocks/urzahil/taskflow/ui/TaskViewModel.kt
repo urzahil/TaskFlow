@@ -95,7 +95,9 @@ class TaskViewModel(
         private const val KEY_LAST_ROLLOVER_TIMESTAMP = "last_rollover_timestamp"
         private const val KEY_LAST_AUTOMATIC_ROLLOVER_DATE = "last_automatic_rollover_date"
         private const val KEY_START_VIEW = "start_view_mode"
+        // Holds the tasks toggled away from the default collapse state (the key predates the setting).
         private const val KEY_COLLAPSED_SUBTASK_TASK_IDS = "collapsed_subtask_task_ids"
+        private const val KEY_SUBTASKS_COLLAPSED_BY_DEFAULT = "subtasks_collapsed_by_default"
     }
 
     private val userPrefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -224,28 +226,50 @@ class TaskViewModel(
         userPrefs?.edit()?.putBoolean(KEY_SHOW_DAILY_PROGRESS, show)?.apply()
     }
 
-    // Tasks whose subtasks are collapsed in the Daily view, keyed by task id so every
-    // occurrence of a recurring task shares the same state.
-    private val _collapsedSubtaskTaskIds = MutableStateFlow(
+    // Whether tasks show their subtasks collapsed in the Daily view unless toggled.
+    private val _subtasksCollapsedByDefault = MutableStateFlow(
+        userPrefs?.getBoolean(KEY_SUBTASKS_COLLAPSED_BY_DEFAULT, false) ?: false
+    )
+    val subtasksCollapsedByDefault: StateFlow<Boolean> = _subtasksCollapsedByDefault.asStateFlow()
+
+    fun setSubtasksCollapsedByDefault(collapsed: Boolean) {
+        if (_subtasksCollapsedByDefault.value == collapsed) return
+        _subtasksCollapsedByDefault.value = collapsed
+        userPrefs?.edit()?.putBoolean(KEY_SUBTASKS_COLLAPSED_BY_DEFAULT, collapsed)?.apply()
+        // Changing the default applies to every task, so earlier per-task toggles are dropped.
+        setSubtaskCollapseOverrides(emptySet())
+    }
+
+    // Tasks the user toggled away from the default, keyed by task id so every occurrence of a
+    // recurring task shares the same state. A task is collapsed when it is in this set XOR
+    // subtasks are collapsed by default.
+    private val _subtaskCollapseOverrides = MutableStateFlow(
         userPrefs?.getStringSet(KEY_COLLAPSED_SUBTASK_TASK_IDS, emptySet())
             ?.mapNotNull { it.toLongOrNull() }
             ?.toSet()
             ?: emptySet()
     )
-    val collapsedSubtaskTaskIds: StateFlow<Set<Long>> = _collapsedSubtaskTaskIds.asStateFlow()
+    val subtaskCollapseOverrides: StateFlow<Set<Long>> = _subtaskCollapseOverrides.asStateFlow()
+
+    fun isSubtasksCollapsed(taskId: Long): Boolean =
+        (taskId in _subtaskCollapseOverrides.value) != _subtasksCollapsedByDefault.value
 
     fun toggleSubtasksCollapsed(taskId: Long) {
-        val current = _collapsedSubtaskTaskIds.value
-        setCollapsedSubtaskTaskIds(if (taskId in current) current - taskId else current + taskId)
+        val current = _subtaskCollapseOverrides.value
+        setSubtaskCollapseOverrides(if (taskId in current) current - taskId else current + taskId)
     }
 
     private fun expandSubtasks(taskId: Long) {
-        val current = _collapsedSubtaskTaskIds.value
-        if (taskId in current) setCollapsedSubtaskTaskIds(current - taskId)
+        if (isSubtasksCollapsed(taskId)) toggleSubtasksCollapsed(taskId)
     }
 
-    private fun setCollapsedSubtaskTaskIds(ids: Set<Long>) {
-        _collapsedSubtaskTaskIds.value = ids
+    private fun clearSubtaskCollapseOverride(taskId: Long) {
+        val current = _subtaskCollapseOverrides.value
+        if (taskId in current) setSubtaskCollapseOverrides(current - taskId)
+    }
+
+    private fun setSubtaskCollapseOverrides(ids: Set<Long>) {
+        _subtaskCollapseOverrides.value = ids
         userPrefs?.edit()
             ?.putStringSet(KEY_COLLAPSED_SUBTASK_TASK_IDS, ids.map { it.toString() }.toSet())
             ?.apply()
@@ -815,7 +839,7 @@ class TaskViewModel(
     fun deleteTask(task: TaskEntity) {
         viewModelScope.launch {
             repository.deleteTask(task)
-            expandSubtasks(task.id)
+            clearSubtaskCollapseOverride(task.id)
             if (_editingTask.value?.id == task.id) {
                 closeAddEditDialog()
             }

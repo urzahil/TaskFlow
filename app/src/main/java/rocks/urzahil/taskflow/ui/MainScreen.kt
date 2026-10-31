@@ -91,7 +91,8 @@ fun MainScreen(
     val maintenanceMessage by viewModel.maintenanceMessage.collectAsStateWithLifecycle()
     val driveSyncState by viewModel.driveSyncState.collectAsStateWithLifecycle()
     val showDailyProgress by viewModel.showDailyProgress.collectAsStateWithLifecycle()
-    val collapsedSubtaskTaskIds by viewModel.collapsedSubtaskTaskIds.collectAsStateWithLifecycle()
+    val subtaskCollapseOverrides by viewModel.subtaskCollapseOverrides.collectAsStateWithLifecycle()
+    val subtasksCollapsedByDefault by viewModel.subtasksCollapsedByDefault.collectAsStateWithLifecycle()
     val isDarkMode by viewModel.isDarkMode.collectAsStateWithLifecycle()
     val useDynamicColors by viewModel.useDynamicColors.collectAsStateWithLifecycle()
     val showMonthlyTaskList by viewModel.showMonthlyTaskList.collectAsStateWithLifecycle()
@@ -432,7 +433,8 @@ fun MainScreen(
                         showDailyProgress = showDailyProgress,
                         currentToday = currentToday,
                         weekSummaries = weekDaysSummary,
-                        collapsedTaskIds = collapsedSubtaskTaskIds,
+                        subtaskCollapseOverrides = subtaskCollapseOverrides,
+                        subtasksCollapsedByDefault = subtasksCollapsedByDefault,
                         onToggleSubtasksCollapsed = { viewModel.toggleSubtasksCollapsed(it) }
                     )
                 }
@@ -525,6 +527,8 @@ fun MainScreen(
                         },
                         showDailyProgress = showDailyProgress,
                         onToggleDailyProgress = { viewModel.setShowDailyProgress(it) },
+                        subtasksCollapsedByDefault = subtasksCollapsedByDefault,
+                        onToggleSubtasksCollapsedByDefault = { viewModel.setSubtasksCollapsedByDefault(it) },
                         isDarkMode = isDarkMode,
                         onToggleDarkMode = { viewModel.setDarkMode(it) },
                         useDynamicColors = useDynamicColors,
