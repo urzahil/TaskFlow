@@ -91,6 +91,7 @@ fun MainScreen(
     val maintenanceMessage by viewModel.maintenanceMessage.collectAsStateWithLifecycle()
     val driveSyncState by viewModel.driveSyncState.collectAsStateWithLifecycle()
     val showDailyProgress by viewModel.showDailyProgress.collectAsStateWithLifecycle()
+    val collapsedSubtaskTaskIds by viewModel.collapsedSubtaskTaskIds.collectAsStateWithLifecycle()
     val isDarkMode by viewModel.isDarkMode.collectAsStateWithLifecycle()
     val useDynamicColors by viewModel.useDynamicColors.collectAsStateWithLifecycle()
     val showMonthlyTaskList by viewModel.showMonthlyTaskList.collectAsStateWithLifecycle()
@@ -430,7 +431,9 @@ fun MainScreen(
                         onAddTask = { viewModel.openAddTaskDialog() },
                         showDailyProgress = showDailyProgress,
                         currentToday = currentToday,
-                        weekSummaries = weekDaysSummary
+                        weekSummaries = weekDaysSummary,
+                        collapsedTaskIds = collapsedSubtaskTaskIds,
+                        onToggleSubtasksCollapsed = { viewModel.toggleSubtasksCollapsed(it) }
                     )
                 }
 
