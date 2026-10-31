@@ -60,7 +60,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import rocks.urzahil.taskflow.data.drive.BackupFileReader
 import rocks.urzahil.taskflow.data.drive.GoogleOAuthHelper
-import rocks.urzahil.taskflow.ui.components.GoogleError10Dialog
 import rocks.urzahil.taskflow.ui.components.TaskAddEditSheet
 import rocks.urzahil.taskflow.ui.daily.DailyView
 import rocks.urzahil.taskflow.ui.list.ListView
@@ -105,7 +104,6 @@ fun MainScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var isSearchActive by remember { mutableStateOf(false) }
 
-    val showGoogleError10Dialog by viewModel.showGoogleError10Dialog.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -157,12 +155,6 @@ fun MainScreen(
         viewModel.driveConsentRequests.collect { pendingIntent ->
             driveConsentLauncher.launch(IntentSenderRequest.Builder(pendingIntent).build())
         }
-    }
-
-    if (showGoogleError10Dialog) {
-        GoogleError10Dialog(
-            onDismiss = { viewModel.setShowGoogleError10Dialog(false) }
-        )
     }
 
     LaunchedEffect(maintenanceMessage) {
@@ -508,9 +500,6 @@ fun MainScreen(
                         },
                         onSetAutoBackup = { enabled ->
                             viewModel.setAutoBackupEnabled(enabled)
-                        },
-                        onShowError10Info = {
-                            viewModel.setShowGoogleError10Dialog(true)
                         },
                         onExportJsonBackup = {
                             exportJsonLauncher.launch(generateBackupFileName())
