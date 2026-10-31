@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import rocks.urzahil.taskflow.data.model.AppDate
 import rocks.urzahil.taskflow.ui.components.CompactTaskRow
 import rocks.urzahil.taskflow.ui.model.DaySummaryUi
+import rocks.urzahil.taskflow.ui.model.SubtaskItemUi
 import rocks.urzahil.taskflow.ui.model.TaskItemUi
 import rocks.urzahil.taskflow.ui.theme.CompletedGreen
 
@@ -61,6 +62,7 @@ fun MonthlyView(
     onPrevMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onToggleTask: (TaskItemUi) -> Unit,
+    onToggleSubtask: (TaskItemUi, SubtaskItemUi) -> Unit = { _, _ -> },
     onSwitchToDailyView: () -> Unit,
     currentToday: AppDate = AppDate.today(),
     showMonthlyTaskList: Boolean = true,
@@ -302,7 +304,8 @@ fun MonthlyView(
                             CompactTaskRow(
                                 taskItem = taskItem,
                                 onToggle = { onToggleTask(taskItem) },
-                                tagPrefix = "monthly"
+                                tagPrefix = "monthly",
+                                onToggleSubtask = { onToggleSubtask(taskItem, it) }
                             )
                         }
                     }

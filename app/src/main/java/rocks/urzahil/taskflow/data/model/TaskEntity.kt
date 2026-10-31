@@ -17,6 +17,7 @@ data class TaskEntity(
     val recurrenceDaysOfWeek: String? = null, // comma-separated ISO day of week 1..7 (1=Monday, 7=Sunday)
     val startDate: String, // ISO YYYY-MM-DD
     val endDate: String? = null, // Optional ISO YYYY-MM-DD
+    val sharedSubtasks: Boolean = true, // recurring: one subtask list for every occurrence, or per-occurrence lists
     val createdAt: Long = System.currentTimeMillis()
 ) {
     /**

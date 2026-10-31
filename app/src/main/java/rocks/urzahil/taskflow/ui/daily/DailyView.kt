@@ -20,13 +20,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
@@ -42,6 +45,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -56,6 +60,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,6 +69,7 @@ import rocks.urzahil.taskflow.data.model.AppDate
 import rocks.urzahil.taskflow.data.model.TaskEntity
 import rocks.urzahil.taskflow.ui.DailyStats
 import rocks.urzahil.taskflow.ui.model.DaySummaryUi
+import rocks.urzahil.taskflow.ui.model.SubtaskItemUi
 import rocks.urzahil.taskflow.ui.model.TaskFilter
 import rocks.urzahil.taskflow.ui.model.TaskItemUi
 import rocks.urzahil.taskflow.ui.theme.CompletedGreen
@@ -86,6 +92,9 @@ fun DailyView(
     onEditTask: (TaskEntity) -> Unit,
     onDeleteTask: (TaskEntity) -> Unit,
     onDeleteOccurrence: (TaskItemUi) -> Unit = {},
+    onToggleSubtask: (TaskItemUi, SubtaskItemUi) -> Unit = { _, _ -> },
+    onAddSubtask: (TaskItemUi, String) -> Unit = { _, _ -> },
+    onRemoveSubtask: (TaskItemUi, SubtaskItemUi) -> Unit = { _, _ -> },
     onAddTask: () -> Unit,
     showDailyProgress: Boolean = true,
     currentToday: AppDate = AppDate.today(),
@@ -474,7 +483,10 @@ fun DailyView(
                     onToggle = { onToggleTask(taskItem) },
                     onEdit = { onEditTask(taskItem.task) },
                     onDelete = { onDeleteTask(taskItem.task) },
-                    onDeleteOccurrence = { onDeleteOccurrence(taskItem) }
+                    onDeleteOccurrence = { onDeleteOccurrence(taskItem) },
+                    onToggleSubtask = { onToggleSubtask(taskItem, it) },
+                    onAddSubtask = { onAddSubtask(taskItem, it) },
+                    onRemoveSubtask = { onRemoveSubtask(taskItem, it) }
                 )
             }
         }
@@ -488,11 +500,16 @@ fun TaskCardItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onDeleteOccurrence: () -> Unit = {},
+    onToggleSubtask: (SubtaskItemUi) -> Unit = {},
+    onAddSubtask: (String) -> Unit = {},
+    onRemoveSubtask: (SubtaskItemUi) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val task = taskItem.task
     var menuExpanded by remember { mutableStateOf(false) }
     var showDeleteOccurrenceDialog by remember { mutableStateOf(false) }
+    var showAddSubtaskDialog by remember { mutableStateOf(false) }
+    var newSubtaskTitle by remember { mutableStateOf("") }
 
     val priorityColor = when (task.priority) {
         "High" -> PriorityHigh
@@ -593,6 +610,73 @@ fun TaskCardItem(
                     )
                 }
 
+                taskItem.subtasks.forEach { subtask ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (subtask.isChecked) MaterialTheme.colorScheme.primary else Color.Transparent
+                                )
+                                .clickable { onToggleSubtask(subtask) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (subtask.isChecked) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = "Completed",
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Default.RadioButtonUnchecked,
+                                    contentDescription = "Mark Complete",
+                                    tint = MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = subtask.title,
+                            style = MaterialTheme.typography.bodySmall,
+                            textDecoration = if (subtask.isChecked) TextDecoration.LineThrough else TextDecoration.None,
+                            color = if (subtask.isChecked) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onToggleSubtask(subtask) }
+                        )
+                        IconButton(
+                            onClick = { onRemoveSubtask(subtask) },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Remove subtask",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                }
+
+                if (taskItem.subtasks.isNotEmpty()) {
+                    TextButton(onClick = { showAddSubtaskDialog = true }) {
+                        Text("Add Subtask", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(5.dp))
 
                 // Badges Row: Category, Priority, Recurrence
@@ -683,6 +767,14 @@ fun TaskCardItem(
                             onEdit()
                         }
                     )
+                    DropdownMenuItem(
+                        text = { Text("Add Subtask") },
+                        leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            showAddSubtaskDialog = true
+                        }
+                    )
                     if (task.isRecurring) {
                         DropdownMenuItem(
                             text = {
@@ -720,6 +812,43 @@ fun TaskCardItem(
                     )
                 }
             }
+        }
+
+        if (showAddSubtaskDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showAddSubtaskDialog = false
+                    newSubtaskTitle = ""
+                },
+                title = { Text("Add Subtask") },
+                text = {
+                    OutlinedTextField(
+                        value = newSubtaskTitle,
+                        onValueChange = { newSubtaskTitle = it },
+                        label = { Text("Subtask") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showAddSubtaskDialog = false
+                            onAddSubtask(newSubtaskTitle)
+                            newSubtaskTitle = ""
+                        },
+                        enabled = newSubtaskTitle.isNotBlank()
+                    ) { Text("Add") }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showAddSubtaskDialog = false
+                        newSubtaskTitle = ""
+                    }) { Text("Cancel") }
+                }
+            )
         }
 
         if (showDeleteOccurrenceDialog) {

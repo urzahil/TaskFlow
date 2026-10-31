@@ -20,12 +20,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import rocks.urzahil.taskflow.ui.components.CompactTaskRow
 import rocks.urzahil.taskflow.ui.model.DayTasksGroupUi
+import rocks.urzahil.taskflow.ui.model.SubtaskItemUi
 import rocks.urzahil.taskflow.ui.model.TaskItemUi
 
 @Composable
 fun ListView(
     days: List<DayTasksGroupUi>,
     onToggleTask: (TaskItemUi) -> Unit,
+    onToggleSubtask: (TaskItemUi, SubtaskItemUi) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val daysWithTasks = remember(days) { days.filter { it.tasks.isNotEmpty() } }
@@ -91,7 +93,8 @@ fun ListView(
                             CompactTaskRow(
                                 taskItem = taskItem,
                                 onToggle = { onToggleTask(taskItem) },
-                                tagPrefix = "list"
+                                tagPrefix = "list",
+                                onToggleSubtask = { onToggleSubtask(taskItem, it) }
                             )
                         }
                     }

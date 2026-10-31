@@ -88,6 +88,7 @@ fun MainScreen(
 
     val isAddEditSheetOpen by viewModel.isAddEditSheetOpen.collectAsStateWithLifecycle()
     val editingTask by viewModel.editingTask.collectAsStateWithLifecycle()
+    val editingSubtasks by viewModel.editingSubtasks.collectAsStateWithLifecycle()
     val maintenanceMessage by viewModel.maintenanceMessage.collectAsStateWithLifecycle()
     val driveSyncState by viewModel.driveSyncState.collectAsStateWithLifecycle()
     val showDailyProgress by viewModel.showDailyProgress.collectAsStateWithLifecycle()
@@ -431,6 +432,9 @@ fun MainScreen(
                         onEditTask = { viewModel.openEditTaskDialog(it) },
                         onDeleteTask = { viewModel.deleteTask(it) },
                         onDeleteOccurrence = { viewModel.deleteRecurringOccurrence(it) },
+                        onToggleSubtask = { task, subtask -> viewModel.toggleSubtask(task, subtask) },
+                        onAddSubtask = { task, title -> viewModel.addOccurrenceSubtask(task, title) },
+                        onRemoveSubtask = { task, subtask -> viewModel.removeSubtask(task, subtask) },
                         onAddTask = { viewModel.openAddTaskDialog() },
                         showDailyProgress = showDailyProgress,
                         currentToday = currentToday,
@@ -451,6 +455,7 @@ fun MainScreen(
                         onPrevMonth = { viewModel.prevMonth() },
                         onNextMonth = { viewModel.nextMonth() },
                         onToggleTask = { viewModel.toggleTaskCompletion(it) },
+                        onToggleSubtask = { task, subtask -> viewModel.toggleSubtask(task, subtask) },
                         onSwitchToDailyView = { viewModel.setViewMode(ViewMode.DAILY) },
                         currentToday = currentToday,
                         showMonthlyTaskList = showMonthlyTaskList
@@ -461,7 +466,8 @@ fun MainScreen(
                     val next7DaysTasks by viewModel.next7DaysTasks.collectAsStateWithLifecycle()
                     ListView(
                         days = next7DaysTasks,
-                        onToggleTask = { viewModel.toggleTaskCompletion(it) }
+                        onToggleTask = { viewModel.toggleTaskCompletion(it) },
+                        onToggleSubtask = { task, subtask -> viewModel.toggleSubtask(task, subtask) }
                     )
                 }
 
@@ -579,8 +585,9 @@ fun MainScreen(
         TaskAddEditSheet(
             initialDate = selectedDate,
             existingTask = editingTask,
+            existingSubtasks = editingSubtasks,
             onDismiss = { viewModel.closeAddEditDialog() },
-            onSave = { task -> viewModel.saveTask(task) },
+            onSave = { task, subtasks -> viewModel.saveTask(task, subtasks) },
             availableCategories = categories,
             onDelete = { task -> viewModel.deleteTask(task) }
         )

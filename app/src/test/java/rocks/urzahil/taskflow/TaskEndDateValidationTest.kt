@@ -39,7 +39,7 @@ class TaskEndDateValidationTest {
                     initialDate = AppDate(2026, 10, 26),
                     existingTask = task,
                     onDismiss = {},
-                    onSave = {}
+                    onSave = { _, _ -> }
                 )
             }
         }
