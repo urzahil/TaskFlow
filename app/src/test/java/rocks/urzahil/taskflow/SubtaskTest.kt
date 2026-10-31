@@ -305,4 +305,28 @@ class SubtaskTest {
         assertTrue(parsed.subtasks.isEmpty())
         assertTrue(parsed.subtaskCompletions.isEmpty())
     }
+
+    @Test
+    fun completingATaskChecksItsSubtasksOnThatDateOnly() = runBlocking {
+        repository.insertTask(task(1, recurring = true))
+        val (a, b) = addSharedSubtasks(1, "A", "B")
+
+        repository.toggleCompletion(1, day1, currentlyCompleted = false)
+
+        val checks = repository.allSubtaskCompletions.first()
+        assertEquals(setOf(a.id, b.id), checks.filter { it.date == day1 }.map { it.subtaskId }.toSet())
+        assertTrue(checks.none { it.date == day2 })
+    }
+
+    @Test
+    fun uncompletingATaskUnchecksItsSubtasks() = runBlocking {
+        repository.insertTask(task(1, recurring = true))
+        addSharedSubtasks(1, "A", "B")
+        repository.toggleCompletion(1, day1, currentlyCompleted = false)
+
+        repository.toggleCompletion(1, day1, currentlyCompleted = true)
+
+        assertTrue(completedDates(1).isEmpty())
+        assertTrue(repository.allSubtaskCompletions.first().isEmpty())
+    }
 }

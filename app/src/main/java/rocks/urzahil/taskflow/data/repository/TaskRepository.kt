@@ -87,14 +87,10 @@ class TaskRepository(private val taskDao: TaskDao) {
     }
 
     suspend fun toggleCompletion(taskId: Long, dateIso: String, currentlyCompleted: Boolean) {
-        if (currentlyCompleted) {
-            taskDao.deleteCompletion(taskId, dateIso)
-        } else {
-            try {
-                taskDao.insertCompletion(TaskCompletionEntity(taskId = taskId, date = dateIso))
-            } catch (_: SQLiteConstraintException) {
-                // The task was deleted (for example by rollover) while the toggle was in flight.
-            }
+        try {
+            taskDao.setTaskCompleted(taskId, dateIso, completed = !currentlyCompleted)
+        } catch (_: SQLiteConstraintException) {
+            // The task was deleted (for example by rollover) while the toggle was in flight.
         }
     }
 

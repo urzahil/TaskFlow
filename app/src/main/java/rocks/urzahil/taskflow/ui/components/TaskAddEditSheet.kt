@@ -303,7 +303,7 @@ fun TaskAddEditSheet(
                 TextButton(
                     onClick = { subtasks.add(SubtaskEntity(taskId = existingTask?.id ?: 0, title = "")) }
                 ) {
-                    Text("Add subtask")
+                    Text("Add Subtask")
                 }
             }
 

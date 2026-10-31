@@ -184,6 +184,22 @@ interface TaskDao {
         }
     }
 
+    @Query("DELETE FROM subtask_completions WHERE date = :date AND subtaskId IN (:subtaskIds)")
+    suspend fun deleteSubtaskCompletionsOn(date: String, subtaskIds: List<Long>)
+
+    /** Completes or reopens the task on [date], checking or unchecking its subtasks to match. */
+    @Transaction
+    suspend fun setTaskCompleted(taskId: Long, date: String, completed: Boolean) {
+        val shownIds = getShownSubtaskIds(taskId, date)
+        if (completed) {
+            insertCompletion(TaskCompletionEntity(taskId = taskId, date = date))
+            insertSubtaskCompletions(shownIds.map { SubtaskCompletionEntity(subtaskId = it, date = date) })
+        } else {
+            deleteCompletion(taskId, date)
+            if (shownIds.isNotEmpty()) deleteSubtaskCompletionsOn(date, shownIds)
+        }
+    }
+
     /** Flips a subtask's check for [date], then completes or reopens the task to match. */
     @Transaction
     suspend fun toggleSubtask(taskId: Long, subtaskId: Long, date: String) {

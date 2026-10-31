@@ -673,7 +673,7 @@ fun TaskCardItem(
 
                 if (taskItem.subtasks.isNotEmpty()) {
                     TextButton(onClick = { showAddSubtaskDialog = true }) {
-                        Text("Add subtask", style = MaterialTheme.typography.labelMedium)
+                        Text("Add Subtask", style = MaterialTheme.typography.labelMedium)
                     }
                 }
 
@@ -768,7 +768,7 @@ fun TaskCardItem(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Add subtask") },
+                        text = { Text("Add Subtask") },
                         leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
                         onClick = {
                             menuExpanded = false
@@ -820,7 +820,7 @@ fun TaskCardItem(
                     showAddSubtaskDialog = false
                     newSubtaskTitle = ""
                 },
-                title = { Text("Add subtask") },
+                title = { Text("Add Subtask") },
                 text = {
                     OutlinedTextField(
                         value = newSubtaskTitle,
