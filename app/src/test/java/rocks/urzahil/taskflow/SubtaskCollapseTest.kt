@@ -72,17 +72,17 @@ class SubtaskCollapseTest {
     @Test
     fun toggleSubtasksCollapsed_flipsStateAndPersistsAcrossViewModels() {
         val viewModel = newViewModel()
-        assertTrue(viewModel.collapsedSubtaskTaskIds.value.isEmpty())
+        assertTrue(viewModel.subtaskCollapseOverrides.value.isEmpty())
 
         viewModel.toggleSubtasksCollapsed(42L)
         viewModel.toggleSubtasksCollapsed(7L)
-        assertEquals(setOf(42L, 7L), viewModel.collapsedSubtaskTaskIds.value)
+        assertEquals(setOf(42L, 7L), viewModel.subtaskCollapseOverrides.value)
 
         viewModel.toggleSubtasksCollapsed(7L)
-        assertEquals(setOf(42L), viewModel.collapsedSubtaskTaskIds.value)
+        assertEquals(setOf(42L), viewModel.subtaskCollapseOverrides.value)
 
         // A fresh ViewModel (e.g. after an app restart) reads the saved state back.
-        assertEquals(setOf(42L), newViewModel().collapsedSubtaskTaskIds.value)
+        assertEquals(setOf(42L), newViewModel().subtaskCollapseOverrides.value)
     }
 
     @Test
@@ -92,9 +92,33 @@ class SubtaskCollapseTest {
         runBlocking { repository.insertTask(task) }
 
         viewModel.toggleSubtasksCollapsed(task.id)
-        assertTrue(task.id in viewModel.collapsedSubtaskTaskIds.value)
+        assertTrue(task.id in viewModel.subtaskCollapseOverrides.value)
 
         viewModel.deleteTask(task)
-        assertFalse(task.id in viewModel.collapsedSubtaskTaskIds.value)
+        assertFalse(task.id in viewModel.subtaskCollapseOverrides.value)
+    }
+
+    @Test
+    fun collapsedByDefault_collapsesUntoggledTasksAndPersists() {
+        val viewModel = newViewModel()
+        assertFalse(viewModel.isSubtasksCollapsed(1L))
+
+        viewModel.toggleSubtasksCollapsed(1L)
+        assertTrue(viewModel.isSubtasksCollapsed(1L))
+
+        // Switching the default applies to every task and drops earlier toggles.
+        viewModel.setSubtasksCollapsedByDefault(true)
+        assertTrue(viewModel.subtaskCollapseOverrides.value.isEmpty())
+        assertTrue(viewModel.isSubtasksCollapsed(1L))
+        assertTrue(viewModel.isSubtasksCollapsed(2L))
+
+        // Toggling a task now expands it.
+        viewModel.toggleSubtasksCollapsed(2L)
+        assertFalse(viewModel.isSubtasksCollapsed(2L))
+
+        val restarted = newViewModel()
+        assertTrue(restarted.subtasksCollapsedByDefault.value)
+        assertTrue(restarted.isSubtasksCollapsed(1L))
+        assertFalse(restarted.isSubtasksCollapsed(2L))
     }
 }

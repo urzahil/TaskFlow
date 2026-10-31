@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.UnfoldLess
 import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -102,6 +103,8 @@ fun SettingsScreen(
     onShareJsonBackup: () -> Unit = {},
     showDailyProgress: Boolean = true,
     onToggleDailyProgress: (Boolean) -> Unit = {},
+    subtasksCollapsedByDefault: Boolean = false,
+    onToggleSubtasksCollapsedByDefault: (Boolean) -> Unit = {},
     isDarkMode: Boolean = true,
     onToggleDarkMode: (Boolean) -> Unit = {},
     useDynamicColors: Boolean = true,
@@ -801,6 +804,60 @@ fun SettingsScreen(
                             checked = showDailyProgress,
                             onCheckedChange = onToggleDailyProgress,
                             modifier = Modifier.testTag("toggle_daily_progress_switch")
+                        )
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // Subtasks collapsed by default
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggleSubtasksCollapsedByDefault(!subtasksCollapsedByDefault) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.UnfoldLess,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Collapse subtasks by default",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Start tasks with subtasks minimised in Daily view",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = subtasksCollapsedByDefault,
+                            onCheckedChange = onToggleSubtasksCollapsedByDefault,
+                            modifier = Modifier.testTag("toggle_subtasks_collapsed_switch")
                         )
                     }
 

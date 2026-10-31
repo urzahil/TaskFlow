@@ -107,7 +107,8 @@ fun DailyView(
     showDailyProgress: Boolean = true,
     currentToday: AppDate = AppDate.today(),
     weekSummaries: Map<String, DaySummaryUi> = emptyMap(),
-    collapsedTaskIds: Set<Long> = emptySet(),
+    subtaskCollapseOverrides: Set<Long> = emptySet(),
+    subtasksCollapsedByDefault: Boolean = false,
     onToggleSubtasksCollapsed: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -497,7 +498,7 @@ fun DailyView(
                     onToggleSubtask = { onToggleSubtask(taskItem, it) },
                     onAddSubtask = { onAddSubtask(taskItem, it) },
                     onRemoveSubtask = { onRemoveSubtask(taskItem, it) },
-                    isSubtasksCollapsed = taskItem.task.id in collapsedTaskIds,
+                    isSubtasksCollapsed = (taskItem.task.id in subtaskCollapseOverrides) != subtasksCollapsedByDefault,
                     onToggleSubtasksCollapsed = { onToggleSubtasksCollapsed(taskItem.task.id) }
                 )
             }
