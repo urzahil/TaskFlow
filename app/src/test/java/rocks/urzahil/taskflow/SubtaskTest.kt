@@ -8,6 +8,7 @@ import rocks.urzahil.taskflow.data.drive.GoogleDriveBackupManager
 import rocks.urzahil.taskflow.data.model.AppDate
 import rocks.urzahil.taskflow.data.model.SubtaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.SubtaskEntity
+import rocks.urzahil.taskflow.data.model.SubtaskExclusionEntity
 import rocks.urzahil.taskflow.data.model.TaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.TaskEntity
 import rocks.urzahil.taskflow.data.repository.TaskRepository
@@ -98,7 +99,7 @@ class SubtaskTest {
     @Test
     fun independentSubtasksBelongToOneDateOnly() = runBlocking {
         repository.insertTask(task(1, recurring = true, shared = false))
-        repository.addOccurrenceSubtask(1, day1, "Only today", 0)
+        repository.addOccurrenceSubtask(1, day1, "Only today", 0, true)
 
         val items = repository.allSubtasks.first()
         assertEquals(listOf(day1), items.map { it.date })
@@ -112,8 +113,8 @@ class SubtaskTest {
     @Test
     fun deletingAnOccurrenceRemovesThatDatesSubtasks() = runBlocking {
         repository.insertTask(task(1, recurring = true, shared = false))
-        repository.addOccurrenceSubtask(1, day1, "Day one", 0)
-        repository.addOccurrenceSubtask(1, day2, "Day two", 0)
+        repository.addOccurrenceSubtask(1, day1, "Day one", 0, true)
+        repository.addOccurrenceSubtask(1, day2, "Day two", 0, true)
 
         repository.deleteRecurringOccurrence(1, day1)
 
@@ -152,7 +153,7 @@ class SubtaskTest {
             listOf(TaskCompletionEntity(taskId = 1, date = day1), TaskCompletionEntity(taskId = 1, date = day2))
         )
 
-        repository.addOccurrenceSubtask(1, day1, "New", 0)
+        repository.addOccurrenceSubtask(1, day1, "New", 0, true)
 
         assertEquals(listOf(day2), completedDates(1))
     }
@@ -193,22 +194,88 @@ class SubtaskTest {
             SubtaskEntity(id = 11, taskId = 2, date = null, title = "Shared", position = 1)
         )
         val completions = listOf(SubtaskCompletionEntity(11, day1, 5L))
+        val exclusions = listOf(SubtaskExclusionEntity(11, day2))
 
         val json = backupManager.exportBackupJson(
-            tasks, emptyList(), emptyList(), emptyList(), subtasks, completions
+            tasks, emptyList(), emptyList(), emptyList(), subtasks, completions, exclusions
         )
         val parsed = backupManager.parseBackupJson(json)
 
         assertEquals(listOf(false, true), parsed.tasks.map { it.sharedSubtasks })
         assertEquals(subtasks, parsed.subtasks)
         assertEquals(completions, parsed.subtaskCompletions)
+        assertEquals(exclusions, parsed.subtaskExclusions)
 
         repository.clearAndRestoreAll(
             parsed.tasks, parsed.completions, parsed.categories,
-            subtasks = parsed.subtasks, subtaskCompletions = parsed.subtaskCompletions
+            subtasks = parsed.subtasks, subtaskCompletions = parsed.subtaskCompletions,
+            subtaskExclusions = parsed.subtaskExclusions
         )
         assertEquals(subtasks, repository.allSubtasks.first().sortedBy { it.id })
         assertEquals(completions, repository.allSubtaskCompletions.first())
+        assertEquals(exclusions, repository.allSubtaskExclusions.first())
+    }
+
+    @Test
+    fun removingASharedSubtaskHidesItOnThatDayOnly() = runBlocking {
+        repository.insertTask(task(1, recurring = true))
+        val (a, b) = addSharedSubtasks(1, "A", "B")
+
+        repository.removeSubtaskOn(1, a.id, day1, shared = true)
+
+        assertEquals(listOf(SubtaskExclusionEntity(a.id, day1)), repository.allSubtaskExclusions.first())
+        // The item is hidden from day1's check-off, so checking B alone completes day1 only.
+        repository.toggleSubtask(1, b.id, day1)
+        assertEquals(listOf(day1), completedDates(1))
+        // Day2 still shows A, so B alone does not complete it.
+        repository.toggleSubtask(1, b.id, day2)
+        assertEquals(listOf(day1), completedDates(1))
+        assertEquals(2, repository.allSubtasks.first().size)
+    }
+
+    @Test
+    fun removingTheLastUncheckedSubtaskCompletesTheTask() = runBlocking {
+        repository.insertTask(task(1, recurring = true))
+        val (a, b) = addSharedSubtasks(1, "A", "B")
+        repository.toggleSubtask(1, a.id, day1)
+
+        repository.removeSubtaskOn(1, b.id, day1, shared = true)
+
+        assertEquals(listOf(day1), completedDates(1))
+    }
+
+    @Test
+    fun addingToASharedRecurringTaskGoesOnThatDayOnly() = runBlocking {
+        repository.insertTask(task(1, recurring = true))
+        val (a) = addSharedSubtasks(1, "A")
+        repository.toggleSubtask(1, a.id, day1)
+        repository.toggleSubtask(1, a.id, day2)
+
+        repository.addOccurrenceSubtask(1, day1, "Extra", 1, true)
+
+        assertEquals(listOf(day2), completedDates(1))
+        assertEquals(listOf(null, day1), repository.allSubtasks.first().map { it.date })
+    }
+
+    @Test
+    fun addingToAOneTimeTaskIsStoredWithoutADate() = runBlocking {
+        repository.insertTask(task(1))
+
+        repository.addOccurrenceSubtask(1, day1, "Extra", 0, false)
+
+        assertEquals(listOf(null), repository.allSubtasks.first().map { it.date })
+    }
+
+    @Test
+    fun deletingAnOccurrenceDropsThatDatesSubtaskExclusions() = runBlocking {
+        repository.insertTask(task(1, recurring = true))
+        val (a) = addSharedSubtasks(1, "A")
+        repository.removeSubtaskOn(1, a.id, day1, shared = true)
+        repository.removeSubtaskOn(1, a.id, day2, shared = true)
+
+        repository.deleteRecurringOccurrence(1, day1)
+
+        assertEquals(listOf(day2), repository.allSubtaskExclusions.first().map { it.date })
     }
 
     @Test

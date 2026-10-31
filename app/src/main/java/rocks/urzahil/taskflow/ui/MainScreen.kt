@@ -434,7 +434,7 @@ fun MainScreen(
                         onDeleteOccurrence = { viewModel.deleteRecurringOccurrence(it) },
                         onToggleSubtask = { task, subtask -> viewModel.toggleSubtask(task, subtask) },
                         onAddSubtask = { task, title -> viewModel.addOccurrenceSubtask(task, title) },
-                        onRemoveSubtask = { viewModel.removeOccurrenceSubtask(it) },
+                        onRemoveSubtask = { task, subtask -> viewModel.removeSubtask(task, subtask) },
                         onAddTask = { viewModel.openAddTaskDialog() },
                         showDailyProgress = showDailyProgress,
                         currentToday = currentToday,

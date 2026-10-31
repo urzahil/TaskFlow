@@ -9,6 +9,7 @@ import rocks.urzahil.taskflow.data.model.AppDate
 import rocks.urzahil.taskflow.data.model.CategoryEntity
 import rocks.urzahil.taskflow.data.model.SubtaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.SubtaskEntity
+import rocks.urzahil.taskflow.data.model.SubtaskExclusionEntity
 import rocks.urzahil.taskflow.data.model.TaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.TaskEntity
 import rocks.urzahil.taskflow.data.model.TaskOccurrenceExclusionEntity
@@ -29,7 +30,8 @@ data class ParsedBackup(
     val categories: List<CategoryEntity> = emptyList(),
     val occurrenceExclusions: List<TaskOccurrenceExclusionEntity> = emptyList(),
     val subtasks: List<SubtaskEntity> = emptyList(),
-    val subtaskCompletions: List<SubtaskCompletionEntity> = emptyList()
+    val subtaskCompletions: List<SubtaskCompletionEntity> = emptyList(),
+    val subtaskExclusions: List<SubtaskExclusionEntity> = emptyList()
 )
 
 data class RestoreResultData(
@@ -222,7 +224,8 @@ open class GoogleDriveBackupManager(
         categories: List<CategoryEntity> = emptyList(),
         exclusions: List<TaskOccurrenceExclusionEntity> = emptyList(),
         subtasks: List<SubtaskEntity> = emptyList(),
-        subtaskCompletions: List<SubtaskCompletionEntity> = emptyList()
+        subtaskCompletions: List<SubtaskCompletionEntity> = emptyList(),
+        subtaskExclusions: List<SubtaskExclusionEntity> = emptyList()
     ): String {
         val root = JSONObject()
         root.put("version", 4)
@@ -292,6 +295,15 @@ open class GoogleDriveBackupManager(
         }
         root.put("subtaskCompletions", subtaskCompletionsArray)
 
+        val subtaskExclusionsArray = JSONArray()
+        subtaskExclusions.forEach { exclusion ->
+            subtaskExclusionsArray.put(JSONObject().apply {
+                put("subtaskId", exclusion.subtaskId)
+                put("date", exclusion.date)
+            })
+        }
+        root.put("subtaskExclusions", subtaskExclusionsArray)
+
         val categoriesArray = JSONArray()
         categories.forEach { cat ->
             val catObj = JSONObject().apply {
@@ -320,7 +332,7 @@ open class GoogleDriveBackupManager(
         }
         // Validate the complete input before the restore transaction can delete local data.
         require(root.optJSONArray("tasks") != null) { "Backup must contain a tasks array" }
-        for (key in listOf("completions", "categories", "subtasks", "subtaskCompletions")) {
+        for (key in listOf("completions", "categories", "subtasks", "subtaskCompletions", "subtaskExclusions")) {
             require(!root.has(key) || root.optJSONArray(key) != null) {
                 "Backup $key must be an array"
             }
@@ -451,6 +463,23 @@ open class GoogleDriveBackupManager(
             }
         }
 
+        val subtaskExclusions = mutableListOf<SubtaskExclusionEntity>()
+        val subtaskExclusionsArray = root.optJSONArray("subtaskExclusions")
+        if (subtaskExclusionsArray != null) {
+            for (i in 0 until subtaskExclusionsArray.length()) {
+                val obj = subtaskExclusionsArray.getJSONObject(i)
+                val exclusion = SubtaskExclusionEntity(
+                    subtaskId = obj.getLong("subtaskId"),
+                    date = obj.getString("date")
+                )
+                if (exclusion.subtaskId !in subtaskIds) continue
+                require(
+                    AppDate.parseIso(exclusion.date).toIsoString() == exclusion.date
+                ) { "Invalid subtask exclusion date" }
+                subtaskExclusions.add(exclusion)
+            }
+        }
+
         val categoriesArray = root.optJSONArray("categories")
         if (categoriesArray != null && categoriesArray.length() > 0) {
             for (i in 0 until categoriesArray.length()) {
@@ -500,7 +529,10 @@ open class GoogleDriveBackupManager(
             }
         }
 
-        return ParsedBackup(tasks, completions, categories, exclusions, subtasks, subtaskCompletions)
+        return ParsedBackup(
+            tasks, completions, categories, exclusions, subtasks, subtaskCompletions,
+            subtaskExclusions
+        )
     }
 
     /**
@@ -512,11 +544,13 @@ open class GoogleDriveBackupManager(
         categories: List<CategoryEntity> = emptyList(),
         exclusions: List<TaskOccurrenceExclusionEntity> = emptyList(),
         subtasks: List<SubtaskEntity> = emptyList(),
-        subtaskCompletions: List<SubtaskCompletionEntity> = emptyList()
+        subtaskCompletions: List<SubtaskCompletionEntity> = emptyList(),
+        subtaskExclusions: List<SubtaskExclusionEntity> = emptyList()
     ): Result<DriveBackupInfo> = withContext(Dispatchers.IO) {
         val email = getConnectedAccountEmail() ?: return@withContext Result.failure(notConnected())
         val json = exportBackupJson(
-            tasks, completions, categories, exclusions, subtasks, subtaskCompletions
+            tasks, completions, categories, exclusions, subtasks, subtaskCompletions,
+            subtaskExclusions
         )
         val result = driveService.uploadBackup(email, json).forgetConnectionIfAccessLost()
         result.onSuccess {
@@ -552,7 +586,8 @@ open class GoogleDriveBackupManager(
                 categories = parsed.categories,
                 occurrenceExclusions = parsed.occurrenceExclusions,
                 subtasks = parsed.subtasks,
-                subtaskCompletions = parsed.subtaskCompletions
+                subtaskCompletions = parsed.subtaskCompletions,
+                subtaskExclusions = parsed.subtaskExclusions
             )
             prefs.edit()
                 .putLong(KEY_LAST_BACKUP_TIME, System.currentTimeMillis())
@@ -584,7 +619,8 @@ open class GoogleDriveBackupManager(
                     categories = parsed.categories,
                     occurrenceExclusions = parsed.occurrenceExclusions,
                     subtasks = parsed.subtasks,
-                    subtaskCompletions = parsed.subtaskCompletions
+                    subtaskCompletions = parsed.subtaskCompletions,
+                    subtaskExclusions = parsed.subtaskExclusions
                 )
                 prefs.edit()
                     .putLong(KEY_LAST_BACKUP_TIME, System.currentTimeMillis())

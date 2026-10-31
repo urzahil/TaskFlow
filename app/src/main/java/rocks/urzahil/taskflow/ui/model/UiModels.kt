@@ -13,7 +13,8 @@ data class TaskItemUi(
 data class SubtaskItemUi(
     val id: Long,
     val title: String,
-    val isChecked: Boolean
+    val isChecked: Boolean,
+    val shared: Boolean // true = from the task's shared list, false = added for one date
 )
 
 data class DaySummaryUi(

@@ -15,8 +15,10 @@ import rocks.urzahil.taskflow.data.model.AppDate
 import rocks.urzahil.taskflow.data.model.CategoryEntity
 import rocks.urzahil.taskflow.data.model.SubtaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.SubtaskEntity
+import rocks.urzahil.taskflow.data.model.SubtaskExclusionEntity
 import rocks.urzahil.taskflow.data.model.TaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.TaskEntity
+import rocks.urzahil.taskflow.data.model.TaskOccurrenceExclusionEntity
 import rocks.urzahil.taskflow.data.repository.OccurrenceExclusions
 import rocks.urzahil.taskflow.data.repository.TaskSchedule
 import rocks.urzahil.taskflow.data.repository.TaskRepository
@@ -451,7 +453,8 @@ class TaskViewModel(
         completions: List<TaskCompletionEntity>,
         private val exclusions: OccurrenceExclusions,
         subtasks: List<SubtaskEntity>,
-        subtaskCompletions: List<SubtaskCompletionEntity>
+        subtaskCompletions: List<SubtaskCompletionEntity>,
+        subtaskExclusions: List<SubtaskExclusionEntity>
     ) {
         /** Tasks in display order with their schedules; tasks with an unparseable start are never shown. */
         private val scheduled: List<Pair<TaskEntity, TaskSchedule>> =
@@ -467,16 +470,20 @@ class TaskViewModel(
             subtaskCompletions.groupBy({ it.date }, { it.subtaskId })
                 .mapValues { (_, ids) -> ids.toHashSet() }
 
+        private val removedSubtaskIdsByDate: Map<String, Set<Long>> =
+            subtaskExclusions.groupBy({ it.date }, { it.subtaskId })
+                .mapValues { (_, ids) -> ids.toHashSet() }
+
         private fun subtasksOf(task: TaskEntity, dateIso: String): List<SubtaskItemUi> {
-            val items = (
-                if (task.isRecurring && !task.sharedSubtasks) {
-                    occurrenceSubtasks[task.id to dateIso]
-                } else {
-                    sharedSubtasks[task.id]
-                }
-                ) ?: return emptyList()
+            val own = occurrenceSubtasks[task.id to dateIso].orEmpty()
+            val removed = removedSubtaskIdsByDate[dateIso].orEmpty()
+            val shared = if (task.sharedSubtasks) {
+                sharedSubtasks[task.id].orEmpty().filter { it.id !in removed }
+            } else {
+                emptyList()
+            }
             val checked = checkedSubtaskIdsByDate[dateIso].orEmpty()
-            return items.map { SubtaskItemUi(it.id, it.title, it.id in checked) }
+            return (shared + own).map { SubtaskItemUi(it.id, it.title, it.id in checked, it.date == null) }
         }
 
         private fun scheduledOn(date: AppDate, dateIso: String) = scheduled.filter { (_, schedule) ->
@@ -516,15 +523,22 @@ class TaskViewModel(
         }
     }
 
+    @Suppress("UNCHECKED_CAST")
     private val snapshot = combine(
         repository.allTasks,
         repository.allCompletions,
         repository.allOccurrenceExclusions,
         repository.allSubtasks,
-        repository.allSubtaskCompletions
-    ) { tasks, completions, exclusions, subtasks, subtaskCompletions ->
+        repository.allSubtaskCompletions,
+        repository.allSubtaskExclusions
+    ) { values ->
         ScheduleSnapshot(
-            tasks, completions, OccurrenceExclusions(exclusions), subtasks, subtaskCompletions
+            values[0] as List<TaskEntity>,
+            values[1] as List<TaskCompletionEntity>,
+            OccurrenceExclusions(values[2] as List<TaskOccurrenceExclusionEntity>),
+            values[3] as List<SubtaskEntity>,
+            values[4] as List<SubtaskCompletionEntity>,
+            values[5] as List<SubtaskExclusionEntity>
         )
     }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(5000), replay = 1)
 
@@ -747,15 +761,18 @@ class TaskViewModel(
                 taskId = taskItem.task.id,
                 dateIso = taskItem.date.toIsoString(),
                 title = title.trim(),
-                position = taskItem.subtasks.size
+                position = taskItem.subtasks.size,
+                isRecurring = taskItem.task.isRecurring
             )
             triggerAutoBackup()
         }
     }
 
-    fun removeOccurrenceSubtask(subtask: SubtaskItemUi) {
+    fun removeSubtask(taskItem: TaskItemUi, subtask: SubtaskItemUi) {
         viewModelScope.launch {
-            repository.removeOccurrenceSubtask(subtask.id)
+            repository.removeSubtaskOn(
+                taskItem.task.id, subtask.id, taskItem.date.toIsoString(), subtask.shared
+            )
             triggerAutoBackup()
         }
     }
@@ -886,8 +903,10 @@ class TaskViewModel(
                     val exclusions = repository.allOccurrenceExclusions.first()
                     val subtasks = repository.allSubtasks.first()
                     val subtaskCompletions = repository.allSubtaskCompletions.first()
+                    val subtaskExclusions = repository.allSubtaskExclusions.first()
                     val result = driveBackupManager.backupToDrive(
-                        tasks, completions, categories, exclusions, subtasks, subtaskCompletions
+                        tasks, completions, categories, exclusions, subtasks, subtaskCompletions,
+                        subtaskExclusions
                     )
                     if (result.isSuccess) {
                         driveBackupManager.setBackupPendingDurable(false)
@@ -934,8 +953,10 @@ class TaskViewModel(
                     val exclusions = repository.allOccurrenceExclusions.first()
                     val subtasks = repository.allSubtasks.first()
                     val subtaskCompletions = repository.allSubtaskCompletions.first()
+                    val subtaskExclusions = repository.allSubtaskExclusions.first()
                     val result = driveBackupManager.backupToDrive(
-                        tasks, completions, categories, exclusions, subtasks, subtaskCompletions
+                        tasks, completions, categories, exclusions, subtasks, subtaskCompletions,
+                        subtaskExclusions
                     )
                     if (result.isSuccess) {
                         refreshDriveState(
@@ -1093,8 +1114,10 @@ class TaskViewModel(
         val exclusions = repository.allOccurrenceExclusions.first()
         val subtasks = repository.allSubtasks.first()
         val subtaskCompletions = repository.allSubtaskCompletions.first()
+        val subtaskExclusions = repository.allSubtaskExclusions.first()
         return driveBackupManager.exportBackupJson(
-            tasks, completions, categories, exclusions, subtasks, subtaskCompletions
+            tasks, completions, categories, exclusions, subtasks, subtaskCompletions,
+            subtaskExclusions
         )
     }
 

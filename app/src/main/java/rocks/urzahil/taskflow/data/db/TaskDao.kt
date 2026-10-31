@@ -10,6 +10,7 @@ import androidx.room.Update
 import rocks.urzahil.taskflow.data.model.CategoryEntity
 import rocks.urzahil.taskflow.data.model.SubtaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.SubtaskEntity
+import rocks.urzahil.taskflow.data.model.SubtaskExclusionEntity
 import rocks.urzahil.taskflow.data.model.TaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.TaskEntity
 import rocks.urzahil.taskflow.data.model.TaskOccurrenceExclusionEntity
@@ -53,6 +54,7 @@ interface TaskDao {
         insertOccurrenceExclusion(TaskOccurrenceExclusionEntity(taskId, date))
         deleteCompletion(taskId, date)
         deleteSubtasksOn(taskId, date)
+        deleteSubtaskExclusionsOn(taskId, date)
     }
 
     /** Completions and occurrence exclusions go with the task (ON DELETE CASCADE). */
@@ -84,6 +86,21 @@ interface TaskDao {
     @Query("SELECT * FROM subtask_completions")
     fun getAllSubtaskCompletions(): Flow<List<SubtaskCompletionEntity>>
 
+    @Query("SELECT * FROM subtask_exclusions")
+    fun getAllSubtaskExclusions(): Flow<List<SubtaskExclusionEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSubtaskExclusion(exclusion: SubtaskExclusionEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSubtaskExclusions(exclusions: List<SubtaskExclusionEntity>)
+
+    @Query(
+        "DELETE FROM subtask_exclusions WHERE date = :date AND " +
+            "subtaskId IN (SELECT id FROM subtasks WHERE taskId = :taskId)"
+    )
+    suspend fun deleteSubtaskExclusionsOn(taskId: Long, date: String)
+
     @Query("SELECT * FROM subtasks WHERE taskId = :taskId AND date IS NULL ORDER BY position, id")
     suspend fun getSharedSubtasks(taskId: Long): List<SubtaskEntity>
 
@@ -114,22 +131,42 @@ interface TaskDao {
     @Query("SELECT COUNT(*) FROM subtask_completions WHERE subtaskId = :subtaskId AND date = :date")
     suspend fun countSubtaskCompletion(subtaskId: Long, date: String): Int
 
-    /** The subtasks a task shows on [date]: its shared ones, or that date's own ones. */
+    /**
+     * The subtasks a task shows on [date]: that date's own ones, plus the shared ones of a task
+     * with a shared list unless removed from that date.
+     */
     @Query(
         "SELECT s.id FROM subtasks s JOIN tasks t ON t.id = s.taskId " +
-            "WHERE s.taskId = :taskId AND " +
-            "((t.sharedSubtasks = 1 AND s.date IS NULL) OR (t.sharedSubtasks = 0 AND s.date = :date))"
+            "WHERE s.taskId = :taskId AND (s.date = :date OR (t.sharedSubtasks = 1 AND s.date IS NULL AND " +
+            "NOT EXISTS (SELECT 1 FROM subtask_exclusions e WHERE e.subtaskId = s.id AND e.date = :date)))"
     )
     suspend fun getShownSubtaskIds(taskId: Long, date: String): List<Long>
 
     @Query("SELECT COUNT(*) FROM subtask_completions WHERE date = :date AND subtaskId IN (:subtaskIds)")
     suspend fun countSubtaskCompletionsOn(date: String, subtaskIds: List<Long>): Int
 
-    /** Adds a subtask to one date and reopens the task on that date. */
+    /**
+     * Removes a subtask from [date] only: a shared one is hidden there, an own one is deleted.
+     * The task completes if every item left on that date is checked.
+     */
     @Transaction
-    suspend fun addOccurrenceSubtask(subtask: SubtaskEntity) {
+    suspend fun removeSubtaskOn(taskId: Long, subtaskId: Long, date: String, shared: Boolean) {
+        if (shared) {
+            insertSubtaskExclusion(SubtaskExclusionEntity(subtaskId, date))
+        } else {
+            deleteSubtask(subtaskId)
+        }
+        val shownIds = getShownSubtaskIds(taskId, date)
+        if (shownIds.isNotEmpty() && countSubtaskCompletionsOn(date, shownIds) == shownIds.size) {
+            insertCompletion(TaskCompletionEntity(taskId = taskId, date = date))
+        }
+    }
+
+    /** Adds [subtask] and reopens the task on [date]. */
+    @Transaction
+    suspend fun addOccurrenceSubtask(subtask: SubtaskEntity, date: String) {
         insertSubtask(subtask)
-        deleteCompletion(subtask.taskId, subtask.date!!)
+        deleteCompletion(subtask.taskId, date)
     }
 
     /**
@@ -320,7 +357,8 @@ interface TaskDao {
         categories: List<CategoryEntity>,
         occurrenceExclusions: List<TaskOccurrenceExclusionEntity> = emptyList(),
         subtasks: List<SubtaskEntity> = emptyList(),
-        subtaskCompletions: List<SubtaskCompletionEntity> = emptyList()
+        subtaskCompletions: List<SubtaskCompletionEntity> = emptyList(),
+        subtaskExclusions: List<SubtaskExclusionEntity> = emptyList()
     ) {
         deleteAllTasks()
         deleteAllCategories()
@@ -341,6 +379,9 @@ interface TaskDao {
         }
         if (subtaskCompletions.isNotEmpty()) {
             insertSubtaskCompletions(subtaskCompletions)
+        }
+        if (subtaskExclusions.isNotEmpty()) {
+            insertSubtaskExclusions(subtaskExclusions)
         }
     }
 }

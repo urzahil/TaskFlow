@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -93,7 +94,7 @@ fun DailyView(
     onDeleteOccurrence: (TaskItemUi) -> Unit = {},
     onToggleSubtask: (TaskItemUi, SubtaskItemUi) -> Unit = { _, _ -> },
     onAddSubtask: (TaskItemUi, String) -> Unit = { _, _ -> },
-    onRemoveSubtask: (SubtaskItemUi) -> Unit = {},
+    onRemoveSubtask: (TaskItemUi, SubtaskItemUi) -> Unit = { _, _ -> },
     onAddTask: () -> Unit,
     showDailyProgress: Boolean = true,
     currentToday: AppDate = AppDate.today(),
@@ -485,7 +486,7 @@ fun DailyView(
                     onDeleteOccurrence = { onDeleteOccurrence(taskItem) },
                     onToggleSubtask = { onToggleSubtask(taskItem, it) },
                     onAddSubtask = { onAddSubtask(taskItem, it) },
-                    onRemoveSubtask = onRemoveSubtask
+                    onRemoveSubtask = { onRemoveSubtask(taskItem, it) }
                 )
             }
         }
@@ -509,7 +510,6 @@ fun TaskCardItem(
     var showDeleteOccurrenceDialog by remember { mutableStateOf(false) }
     var showAddSubtaskDialog by remember { mutableStateOf(false) }
     var newSubtaskTitle by remember { mutableStateOf("") }
-    val ownSubtasks = task.isRecurring && !task.sharedSubtasks
 
     val priorityColor = when (task.priority) {
         "High" -> PriorityHigh
@@ -657,7 +657,7 @@ fun TaskCardItem(
                                 .weight(1f)
                                 .clickable { onToggleSubtask(subtask) }
                         )
-                        if (ownSubtasks) {
+                        if (task.isRecurring) {
                             IconButton(
                                 onClick = { onRemoveSubtask(subtask) },
                                 modifier = Modifier.size(24.dp)
@@ -673,7 +673,7 @@ fun TaskCardItem(
                     }
                 }
 
-                if (ownSubtasks) {
+                if (taskItem.subtasks.isNotEmpty()) {
                     TextButton(onClick = { showAddSubtaskDialog = true }) {
                         Text("Add subtask", style = MaterialTheme.typography.labelMedium)
                     }
@@ -767,6 +767,14 @@ fun TaskCardItem(
                         onClick = {
                             menuExpanded = false
                             onEdit()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Add subtask") },
+                        leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
+                        onClick = {
+                            menuExpanded = false
+                            showAddSubtaskDialog = true
                         }
                     )
                     if (task.isRecurring) {

@@ -10,6 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import rocks.urzahil.taskflow.data.model.CategoryEntity
 import rocks.urzahil.taskflow.data.model.SubtaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.SubtaskEntity
+import rocks.urzahil.taskflow.data.model.SubtaskExclusionEntity
 import rocks.urzahil.taskflow.data.model.TaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.TaskEntity
 import rocks.urzahil.taskflow.data.model.TaskOccurrenceExclusionEntity
@@ -21,7 +22,8 @@ import rocks.urzahil.taskflow.data.model.TaskOccurrenceExclusionEntity
         CategoryEntity::class,
         TaskOccurrenceExclusionEntity::class,
         SubtaskEntity::class,
-        SubtaskCompletionEntity::class
+        SubtaskCompletionEntity::class,
+        SubtaskExclusionEntity::class
     ],
     version = 7,
     exportSchema = true
@@ -161,6 +163,16 @@ abstract class AppDatabase : RoomDatabase() {
                         subtaskId INTEGER NOT NULL,
                         date TEXT NOT NULL,
                         completedAt INTEGER NOT NULL,
+                        PRIMARY KEY (subtaskId, date),
+                        FOREIGN KEY (subtaskId) REFERENCES subtasks(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS subtask_exclusions (
+                        subtaskId INTEGER NOT NULL,
+                        date TEXT NOT NULL,
                         PRIMARY KEY (subtaskId, date),
                         FOREIGN KEY (subtaskId) REFERENCES subtasks(id) ON UPDATE NO ACTION ON DELETE CASCADE
                     )
