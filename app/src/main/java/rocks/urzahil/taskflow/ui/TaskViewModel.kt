@@ -837,9 +837,11 @@ class TaskViewModel(
     }
 
     fun deleteTask(task: TaskEntity) {
+        // Cleared up front, not after the suspending delete, so the state is gone as soon as
+        // deleteTask returns.
+        clearSubtaskCollapseOverride(task.id)
         viewModelScope.launch {
             repository.deleteTask(task)
-            clearSubtaskCollapseOverride(task.id)
             if (_editingTask.value?.id == task.id) {
                 closeAddEditDialog()
             }
