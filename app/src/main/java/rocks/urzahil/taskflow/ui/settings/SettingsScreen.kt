@@ -97,7 +97,6 @@ fun SettingsScreen(
     onBackupToDrive: () -> Unit = {},
     onRestoreFromDrive: () -> Unit = {},
     onSetAutoBackup: (Boolean) -> Unit = {},
-    onShowError10Info: () -> Unit = {},
     onExportJsonBackup: () -> Unit = {},
     onImportJsonBackup: () -> Unit = {},
     onShareJsonBackup: () -> Unit = {},
@@ -967,28 +966,6 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Connect Google Drive", fontWeight = FontWeight.SemiBold)
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        OutlinedButton(
-                            onClick = onShowError10Info,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("view_error_10_guide_button"),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Info,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                "Sign-In Error 10? View SHA-1 & Setup Guide",
-                                fontSize = 12.5.sp
-                            )
                         }
                     } else {
                         // Account details

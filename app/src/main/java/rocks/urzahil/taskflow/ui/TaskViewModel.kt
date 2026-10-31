@@ -28,8 +28,6 @@ import rocks.urzahil.taskflow.ui.model.SubtaskItemUi
 import rocks.urzahil.taskflow.ui.model.TaskFilter
 import rocks.urzahil.taskflow.ui.model.TaskItemUi
 import rocks.urzahil.taskflow.ui.model.ViewMode
-import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.common.api.CommonStatusCodes
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -274,13 +272,6 @@ class TaskViewModel(
 
     fun dismissMaintenanceMessage() {
         _maintenanceMessage.value = null
-    }
-
-    private val _showGoogleError10Dialog = MutableStateFlow(false)
-    val showGoogleError10Dialog: StateFlow<Boolean> = _showGoogleError10Dialog.asStateFlow()
-
-    fun setShowGoogleError10Dialog(show: Boolean) {
-        _showGoogleError10Dialog.value = show
     }
 
     private val _driveSyncState = MutableStateFlow(
@@ -1049,13 +1040,7 @@ class TaskViewModel(
     }
 
     private fun onDriveConnectFailed(e: Exception) {
-        if ((e as? ApiException)?.statusCode == CommonStatusCodes.DEVELOPER_ERROR) {
-            // The app's signing key is not registered with an OAuth client (sign-in error 10).
-            setShowGoogleError10Dialog(true)
-            refreshDriveState("Google sign-in error 10: OAuth client setup required", isError = true)
-        } else {
-            refreshDriveState("Could not connect Google Drive: ${e.message}", isError = true)
-        }
+        refreshDriveState("Could not connect Google Drive: ${e.message}", isError = true)
     }
 
     private fun onDriveConnected(accountEmail: String) {
