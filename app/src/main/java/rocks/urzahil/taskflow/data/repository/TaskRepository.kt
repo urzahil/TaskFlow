@@ -94,11 +94,11 @@ class TaskRepository(private val taskDao: TaskDao) {
     }
 
     suspend fun replaceSharedSubtasks(taskId: Long, subtasks: List<SubtaskEntity>) =
-        taskDao.replaceSharedSubtasks(taskId, subtasks)
+        taskDao.replaceSharedSubtasks(taskId, subtasks, AppDate.today().toIsoString())
 
     suspend fun addOccurrenceSubtask(taskId: Long, dateIso: String, title: String, position: Int) {
         try {
-            taskDao.insertSubtask(
+            taskDao.addOccurrenceSubtask(
                 SubtaskEntity(taskId = taskId, date = dateIso, title = title, position = position)
             )
         } catch (_: SQLiteConstraintException) {

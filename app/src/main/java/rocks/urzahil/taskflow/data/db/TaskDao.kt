@@ -65,6 +65,9 @@ interface TaskDao {
     @Query("DELETE FROM task_completions WHERE taskId = :taskId AND date = :date")
     suspend fun deleteCompletion(taskId: Long, date: String)
 
+    @Query("DELETE FROM task_completions WHERE taskId = :taskId AND date >= :fromIso")
+    suspend fun deleteCompletionsFrom(taskId: Long, fromIso: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOccurrenceExclusion(exclusion: TaskOccurrenceExclusionEntity)
 
@@ -122,10 +125,21 @@ interface TaskDao {
     @Query("SELECT COUNT(*) FROM subtask_completions WHERE date = :date AND subtaskId IN (:subtaskIds)")
     suspend fun countSubtaskCompletionsOn(date: String, subtaskIds: List<Long>): Int
 
-    /** Saves [subtasks] as the task's shared list; items with id 0 are new, missing ones are removed. */
+    /** Adds a subtask to one date and reopens the task on that date. */
     @Transaction
-    suspend fun replaceSharedSubtasks(taskId: Long, subtasks: List<SubtaskEntity>) {
+    suspend fun addOccurrenceSubtask(subtask: SubtaskEntity) {
+        insertSubtask(subtask)
+        deleteCompletion(subtask.taskId, subtask.date!!)
+    }
+
+    /**
+     * Saves [subtasks] as the task's shared list; items with id 0 are new, missing ones are removed.
+     * A new item reopens the task from [todayIso] on; earlier completions stay.
+     */
+    @Transaction
+    suspend fun replaceSharedSubtasks(taskId: Long, subtasks: List<SubtaskEntity>, todayIso: String) {
         val keptIds = subtasks.map { it.id }.toSet()
+        if (subtasks.any { it.id == 0L }) deleteCompletionsFrom(taskId, todayIso)
         getSharedSubtasks(taskId).filter { it.id !in keptIds }.forEach { deleteSubtask(it.id) }
         subtasks.forEachIndexed { index, subtask ->
             val item = subtask.copy(taskId = taskId, date = null, position = index)

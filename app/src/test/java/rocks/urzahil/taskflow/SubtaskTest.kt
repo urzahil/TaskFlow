@@ -5,8 +5,10 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import rocks.urzahil.taskflow.data.db.AppDatabase
 import rocks.urzahil.taskflow.data.drive.GoogleDriveBackupManager
+import rocks.urzahil.taskflow.data.model.AppDate
 import rocks.urzahil.taskflow.data.model.SubtaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.SubtaskEntity
+import rocks.urzahil.taskflow.data.model.TaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.TaskEntity
 import rocks.urzahil.taskflow.data.repository.TaskRepository
 import kotlinx.coroutines.flow.first
@@ -141,6 +143,46 @@ class SubtaskTest {
         assertEquals(listOf("A2", "C"), repository.allSubtasks.first().map { it.title })
         assertFalse(repository.allSubtasks.first().any { it.id == b.id })
         assertEquals(listOf(a.id), repository.allSubtaskCompletions.first().map { it.subtaskId })
+    }
+
+    @Test
+    fun addingAnOccurrenceSubtaskReopensThatDayOnly() = runBlocking {
+        repository.insertTask(task(1, recurring = true, shared = false))
+        repository.insertCompletions(
+            listOf(TaskCompletionEntity(taskId = 1, date = day1), TaskCompletionEntity(taskId = 1, date = day2))
+        )
+
+        repository.addOccurrenceSubtask(1, day1, "New", 0)
+
+        assertEquals(listOf(day2), completedDates(1))
+    }
+
+    @Test
+    fun addingASharedSubtaskReopensTodayAndFutureButKeepsThePast() = runBlocking {
+        val today = AppDate.today()
+        val past = today.minusDays(1).toIsoString()
+        val now = today.toIsoString()
+        val future = today.plusDays(1).toIsoString()
+        repository.insertTask(task(1, recurring = true))
+        val (a) = addSharedSubtasks(1, "A")
+        repository.insertCompletions(listOf(past, now, future).map { TaskCompletionEntity(taskId = 1, date = it) })
+
+        repository.replaceSharedSubtasks(1, listOf(a, SubtaskEntity(taskId = 1, title = "B")))
+
+        assertEquals(listOf(past), completedDates(1))
+    }
+
+    @Test
+    fun editingOrRemovingSharedSubtasksDoesNotReopenTheTask() = runBlocking {
+        val now = AppDate.today().toIsoString()
+        repository.insertTask(task(1, recurring = true))
+        val (a, b) = addSharedSubtasks(1, "A", "B")
+        repository.insertCompletions(listOf(TaskCompletionEntity(taskId = 1, date = now)))
+
+        repository.replaceSharedSubtasks(1, listOf(a.copy(title = "A2"), b))
+        repository.replaceSharedSubtasks(1, listOf(a))
+
+        assertEquals(listOf(now), completedDates(1))
     }
 
     @Test
