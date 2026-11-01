@@ -192,7 +192,7 @@ fun CompactTaskRow(
 
                         Text(
                             text = subtask.title,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.5.sp),
                             textDecoration = if (subtask.isChecked) TextDecoration.LineThrough else TextDecoration.None,
                             color = if (subtask.isChecked) {
                                 MaterialTheme.colorScheme.onSurfaceVariant
