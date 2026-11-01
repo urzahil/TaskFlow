@@ -709,7 +709,7 @@ fun TaskCardItem(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = subtask.title,
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp),
                                     textDecoration = if (subtask.isChecked) TextDecoration.LineThrough else TextDecoration.None,
                                     color = if (subtask.isChecked) {
                                         MaterialTheme.colorScheme.onSurfaceVariant
