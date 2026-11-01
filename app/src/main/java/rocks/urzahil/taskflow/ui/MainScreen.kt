@@ -434,9 +434,9 @@ fun MainScreen(
                         showDailyProgress = showDailyProgress,
                         currentToday = currentToday,
                         weekSummaries = weekDaysSummary,
-                        subtaskCollapseOverrides = subtaskCollapseOverrides,
+                        subtaskCollapseOverrides = subtaskCollapseOverrides[ViewMode.DAILY].orEmpty(),
                         subtasksCollapsedByDefault = subtasksCollapsedByDefault,
-                        onToggleSubtasksCollapsed = { viewModel.toggleSubtasksCollapsed(it) }
+                        onToggleSubtasksCollapsed = { viewModel.toggleSubtasksCollapsed(ViewMode.DAILY, it) }
                     )
                 }
 
@@ -457,9 +457,9 @@ fun MainScreen(
                         onSwitchToDailyView = { viewModel.setViewMode(ViewMode.DAILY) },
                         currentToday = currentToday,
                         showMonthlyTaskList = showMonthlyTaskList,
-                        subtaskCollapseOverrides = subtaskCollapseOverrides,
+                        subtaskCollapseOverrides = subtaskCollapseOverrides[ViewMode.MONTHLY].orEmpty(),
                         subtasksCollapsedByDefault = subtasksCollapsedByDefault,
-                        onToggleSubtasksCollapsed = { viewModel.toggleSubtasksCollapsed(it) }
+                        onToggleSubtasksCollapsed = { viewModel.toggleSubtasksCollapsed(ViewMode.MONTHLY, it) }
                     )
                 }
 
@@ -470,9 +470,9 @@ fun MainScreen(
                         onToggleTask = { viewModel.toggleTaskCompletion(it) },
                         onToggleSubtask = { task, subtask -> viewModel.toggleSubtask(task, subtask) },
                         hideCompleted = hideCompletedInList,
-                        subtaskCollapseOverrides = subtaskCollapseOverrides,
+                        subtaskCollapseOverrides = subtaskCollapseOverrides[ViewMode.LIST].orEmpty(),
                         subtasksCollapsedByDefault = subtasksCollapsedByDefault,
-                        onToggleSubtasksCollapsed = { viewModel.toggleSubtasksCollapsed(it) }
+                        onToggleSubtasksCollapsed = { viewModel.toggleSubtasksCollapsed(ViewMode.LIST, it) }
                     )
                 }
 
