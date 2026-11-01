@@ -228,7 +228,7 @@ open class GoogleDriveBackupManager(
         subtaskExclusions: List<SubtaskExclusionEntity> = emptyList()
     ): String {
         val root = JSONObject()
-        root.put("version", 4)
+        root.put("version", 5)
         root.put("app", "TaskFlow")
         root.put("timestamp", System.currentTimeMillis())
 
@@ -244,6 +244,9 @@ open class GoogleDriveBackupManager(
                 put("isRecurring", task.isRecurring)
                 put("recurrenceDays", task.recurrenceDays)
                 put("recurrenceDaysOfWeek", task.recurrenceDaysOfWeek ?: JSONObject.NULL)
+                put("recurrenceMonthDays", task.recurrenceMonthDays ?: JSONObject.NULL)
+                put("recurrenceMonthWeekdays", task.recurrenceMonthWeekdays ?: JSONObject.NULL)
+                put("recurrenceMonths", task.recurrenceMonths)
                 put("startDate", task.startDate)
                 put("endDate", task.endDate ?: JSONObject.NULL)
                 put("sharedSubtasks", task.sharedSubtasks)
@@ -327,7 +330,7 @@ open class GoogleDriveBackupManager(
         require(!root.has("app") || root.getString("app") == "TaskFlow") {
             "This file is not a TaskFlow backup"
         }
-        require(!root.has("version") || root.getInt("version") in 1..4) {
+        require(!root.has("version") || root.getInt("version") in 1..5) {
             "Unsupported backup version"
         }
         // Validate the complete input before the restore transaction can delete local data.
@@ -356,6 +359,16 @@ open class GoogleDriveBackupManager(
                     ?.sorted()
                     ?.takeIf { it.isNotEmpty() }
                     ?.joinToString(",")
+                val monthDays = TaskEntity.formatMonthDays(
+                    TaskEntity.parseMonthDays(
+                        if (obj.isNull("recurrenceMonthDays")) null else obj.optString("recurrenceMonthDays")
+                    )
+                )
+                val monthWeekdays = TaskEntity.formatMonthWeekdays(
+                    TaskEntity.parseMonthWeekdays(
+                        if (obj.isNull("recurrenceMonthWeekdays")) null else obj.optString("recurrenceMonthWeekdays")
+                    )
+                )
 
                 val task = TaskEntity(
                     id = obj.optLong("id", System.currentTimeMillis() + i),
@@ -367,6 +380,10 @@ open class GoogleDriveBackupManager(
                     isRecurring = obj.optBoolean("isRecurring", false),
                     recurrenceDays = obj.optInt("recurrenceDays", 1),
                     recurrenceDaysOfWeek = sanitizedDaysOfWeek,
+                    recurrenceMonthDays = monthDays,
+                    recurrenceMonthWeekdays = monthWeekdays,
+                    recurrenceMonths = obj.optInt("recurrenceMonths", 1)
+                        .coerceIn(1, TaskEntity.MAX_RECURRENCE_MONTHS),
                     startDate = obj.optString("startDate", AppDate.today().toIsoString()),
                     endDate = endDate,
                     sharedSubtasks = obj.optBoolean("sharedSubtasks", true),
