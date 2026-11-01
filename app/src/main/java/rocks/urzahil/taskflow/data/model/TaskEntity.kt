@@ -1,5 +1,6 @@
 package rocks.urzahil.taskflow.data.model
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -21,7 +22,10 @@ data class TaskEntity(
     // Monthly recurrence on weekdays: comma-separated "ordinal:weekday" pairs, ordinal 1..4 or -1
     // for the last one, weekday 1..7 (1 = Monday), e.g. "1:1,-1:5" = 1st Monday and last Friday.
     val recurrenceMonthWeekdays: String? = null,
-    val recurrenceMonths: Int = 1, // monthly recurrence: repeats every n months (1..12)
+    // Monthly recurrence: repeats every n months (1..12). The SQL default matches MIGRATION_7_8,
+    // so new and migrated databases have the same schema and raw inserts may omit the column.
+    @ColumnInfo(defaultValue = "1")
+    val recurrenceMonths: Int = 1,
     val startDate: String, // ISO YYYY-MM-DD
     val endDate: String? = null, // Optional ISO YYYY-MM-DD
     val sharedSubtasks: Boolean = true, // recurring: one subtask list for every occurrence, or per-occurrence lists
