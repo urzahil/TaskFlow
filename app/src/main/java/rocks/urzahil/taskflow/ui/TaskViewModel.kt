@@ -95,10 +95,16 @@ class TaskViewModel(
         private const val KEY_LAST_ROLLOVER_TIMESTAMP = "last_rollover_timestamp"
         private const val KEY_LAST_AUTOMATIC_ROLLOVER_DATE = "last_automatic_rollover_date"
         private const val KEY_START_VIEW = "start_view_mode"
-        // Holds the tasks toggled away from the default collapse state (the key predates the setting).
-        private const val KEY_COLLAPSED_SUBTASK_TASK_IDS = "collapsed_subtask_task_ids"
+        // Tasks toggled away from the default collapse state, one set per view; the view name is
+        // appended (e.g. "subtask_collapse_overrides_DAILY").
+        private const val KEY_SUBTASK_COLLAPSE_OVERRIDES_PREFIX = "subtask_collapse_overrides_"
+        // Older builds shared one set across all views; it is discarded on startup.
+        private const val KEY_LEGACY_COLLAPSED_SUBTASK_TASK_IDS = "collapsed_subtask_task_ids"
         private const val KEY_SUBTASKS_COLLAPSED_BY_DEFAULT = "subtasks_collapsed_by_default"
         private const val KEY_HIDE_COMPLETED_IN_LIST = "hide_completed_in_list"
+
+        // Views that show tasks with collapsible subtasks; each keeps its own collapse state.
+        val SUBTASK_COLLAPSE_VIEWS = listOf(ViewMode.DAILY, ViewMode.MONTHLY, ViewMode.LIST)
     }
 
     private val userPrefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -248,42 +254,63 @@ class TaskViewModel(
         if (_subtasksCollapsedByDefault.value == collapsed) return
         _subtasksCollapsedByDefault.value = collapsed
         userPrefs?.edit()?.putBoolean(KEY_SUBTASKS_COLLAPSED_BY_DEFAULT, collapsed)?.apply()
-        // Changing the default applies to every task, so earlier per-task toggles are dropped.
-        setSubtaskCollapseOverrides(emptySet())
+        // Changing the default applies to every task in every view, so earlier toggles are dropped.
+        clearAllSubtaskCollapseOverrides()
     }
 
-    // Tasks the user toggled away from the default, keyed by task id so every occurrence of a
-    // recurring task shares the same state. A task is collapsed when it is in this set XOR
-    // subtasks are collapsed by default.
+    // Per view, the tasks the user toggled away from the default, keyed by task id so every
+    // occurrence of a recurring task shares the same state within that view. A task is collapsed
+    // in a view when it is in that view's set XOR subtasks are collapsed by default.
     private val _subtaskCollapseOverrides = MutableStateFlow(
-        userPrefs?.getStringSet(KEY_COLLAPSED_SUBTASK_TASK_IDS, emptySet())
-            ?.mapNotNull { it.toLongOrNull() }
-            ?.toSet()
-            ?: emptySet()
+        SUBTASK_COLLAPSE_VIEWS.associateWith { view ->
+            userPrefs?.getStringSet(subtaskCollapseOverridesKey(view), emptySet())
+                ?.mapNotNull { it.toLongOrNull() }
+                ?.toSet()
+                ?: emptySet()
+        }
     )
-    val subtaskCollapseOverrides: StateFlow<Set<Long>> = _subtaskCollapseOverrides.asStateFlow()
+    val subtaskCollapseOverrides: StateFlow<Map<ViewMode, Set<Long>>> =
+        _subtaskCollapseOverrides.asStateFlow()
 
-    fun isSubtasksCollapsed(taskId: Long): Boolean =
-        (taskId in _subtaskCollapseOverrides.value) != _subtasksCollapsedByDefault.value
-
-    fun toggleSubtasksCollapsed(taskId: Long) {
-        val current = _subtaskCollapseOverrides.value
-        setSubtaskCollapseOverrides(if (taskId in current) current - taskId else current + taskId)
+    init {
+        userPrefs?.takeIf { it.contains(KEY_LEGACY_COLLAPSED_SUBTASK_TASK_IDS) }
+            ?.edit()?.remove(KEY_LEGACY_COLLAPSED_SUBTASK_TASK_IDS)?.apply()
     }
 
-    private fun expandSubtasks(taskId: Long) {
-        if (isSubtasksCollapsed(taskId)) toggleSubtasksCollapsed(taskId)
+    fun isSubtasksCollapsed(view: ViewMode, taskId: Long): Boolean =
+        (taskId in overridesFor(view)) != _subtasksCollapsedByDefault.value
+
+    fun toggleSubtasksCollapsed(view: ViewMode, taskId: Long) {
+        val current = overridesFor(view)
+        setSubtaskCollapseOverrides(view, if (taskId in current) current - taskId else current + taskId)
+    }
+
+    private fun expandSubtasks(view: ViewMode, taskId: Long) {
+        if (isSubtasksCollapsed(view, taskId)) toggleSubtasksCollapsed(view, taskId)
     }
 
     private fun clearSubtaskCollapseOverride(taskId: Long) {
-        val current = _subtaskCollapseOverrides.value
-        if (taskId in current) setSubtaskCollapseOverrides(current - taskId)
+        SUBTASK_COLLAPSE_VIEWS.forEach { view ->
+            val current = overridesFor(view)
+            if (taskId in current) setSubtaskCollapseOverrides(view, current - taskId)
+        }
     }
 
-    private fun setSubtaskCollapseOverrides(ids: Set<Long>) {
-        _subtaskCollapseOverrides.value = ids
+    private fun clearAllSubtaskCollapseOverrides() {
+        SUBTASK_COLLAPSE_VIEWS.forEach { setSubtaskCollapseOverrides(it, emptySet()) }
+    }
+
+    private fun overridesFor(view: ViewMode): Set<Long> =
+        _subtaskCollapseOverrides.value[view].orEmpty()
+
+    private fun subtaskCollapseOverridesKey(view: ViewMode) =
+        KEY_SUBTASK_COLLAPSE_OVERRIDES_PREFIX + view.name
+
+    private fun setSubtaskCollapseOverrides(view: ViewMode, ids: Set<Long>) {
+        require(view in SUBTASK_COLLAPSE_VIEWS) { "$view has no collapsible subtasks" }
+        _subtaskCollapseOverrides.value = _subtaskCollapseOverrides.value + (view to ids)
         userPrefs?.edit()
-            ?.putStringSet(KEY_COLLAPSED_SUBTASK_TASK_IDS, ids.map { it.toString() }.toSet())
+            ?.putStringSet(subtaskCollapseOverridesKey(view), ids.map { it.toString() }.toSet())
             ?.apply()
     }
 
@@ -811,7 +838,8 @@ class TaskViewModel(
 
     fun addOccurrenceSubtask(taskItem: TaskItemUi, title: String) {
         if (title.isBlank()) return
-        expandSubtasks(taskItem.task.id)
+        // Subtasks are only added from the Daily view.
+        expandSubtasks(ViewMode.DAILY, taskItem.task.id)
         viewModelScope.launch {
             repository.addOccurrenceSubtask(
                 taskId = taskItem.task.id,
