@@ -121,4 +121,14 @@ class SubtaskCollapseTest {
         assertTrue(restarted.isSubtasksCollapsed(1L))
         assertFalse(restarted.isSubtasksCollapsed(2L))
     }
+
+    @Test
+    fun hideCompletedInList_defaultsOffAndPersists() {
+        val viewModel = newViewModel()
+        assertFalse(viewModel.hideCompletedInList.value)
+
+        viewModel.setHideCompletedInList(true)
+        assertTrue(viewModel.hideCompletedInList.value)
+        assertTrue(newViewModel().hideCompletedInList.value)
+    }
 }

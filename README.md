@@ -7,7 +7,7 @@ A task manager for Android built around your day. See what's due today, plan ahe
 - **Three ways to look at your tasks**
   - **Daily view** for what's due today.
   - **Monthly calendar** for planning ahead.
-  - **List view** of upcoming tasks grouped by day.
+  - **List view** of upcoming tasks grouped by day, with an option to hide tasks and subtasks once completed.
 - **Search and filter** tasks, including by state.
 - **Recurring tasks** that repeat on chosen weekdays or every N days, with an optional end date.
 - **Custom categories** to organise your tasks.
