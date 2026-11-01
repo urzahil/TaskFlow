@@ -123,6 +123,60 @@ class TaskSchedulerCleanupIntegrationTest {
         assertEquals("2026-10-19", dao.getTaskById(weeklyId)?.startDate)
     }
 
+    @Test
+    fun monthlyTaskAdvancesToItsNextDay_clampedToMonthEnd() = runBlocking {
+        val today = AppDate(2026, 11, 5)
+        val taskId = dao.insertTask(
+            TaskEntity(
+                title = "Pay rent",
+                startDate = "2026-10-31",
+                isRecurring = true,
+                recurrenceMonthDays = "31"
+            )
+        )
+
+        val result = TaskScheduler.cleanupAndRolloverTasks(dao, today)
+
+        // 31 October was the only past occurrence; November has no 31st.
+        assertEquals(1, result.cleanedRecurringOccurrences)
+        assertEquals("2026-11-30", dao.getTaskById(taskId)?.startDate)
+    }
+
+    @Test
+    fun everyThreeMonthsOnFirstMonday_skipsInactiveMonths() = runBlocking {
+        val taskId = dao.insertTask(
+            TaskEntity(
+                title = "Quarterly review",
+                startDate = "2026-11-02",
+                isRecurring = true,
+                recurrenceMonthWeekdays = "1:1",
+                recurrenceMonths = 3
+            )
+        )
+
+        TaskScheduler.cleanupAndRolloverTasks(dao, AppDate(2026, 11, 3))
+
+        assertEquals("2027-02-01", dao.getTaskById(taskId)?.startDate)
+    }
+
+    @Test
+    fun monthlyTaskEndingBeforeItsNextOccurrence_isDeleted() = runBlocking {
+        val taskId = dao.insertTask(
+            TaskEntity(
+                title = "Ends soon",
+                startDate = "2026-10-15",
+                endDate = "2026-11-10",
+                isRecurring = true,
+                recurrenceMonthDays = "15"
+            )
+        )
+
+        val result = TaskScheduler.cleanupAndRolloverTasks(dao, AppDate(2026, 11, 1))
+
+        assertEquals(1, result.cleanedCount)
+        assertNull(dao.getTaskById(taskId))
+    }
+
     private fun task(
         title: String,
         startDate: String,

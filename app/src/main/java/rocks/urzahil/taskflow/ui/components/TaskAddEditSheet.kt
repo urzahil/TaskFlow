@@ -163,8 +163,9 @@ fun TaskAddEditSheet(
 
     var isRecurring by remember { mutableStateOf(existingTask?.isRecurring ?: false) }
     var recurrenceDays by remember { mutableIntStateOf(existingTask?.recurrenceDays ?: 1) }
+    var isMonthlyMode by remember { mutableStateOf(existingTask?.isMonthlyRecurrence() == true) }
     var isDaysOfWeekMode by remember {
-        mutableStateOf(!existingTask?.recurrenceDaysOfWeek.isNullOrBlank())
+        mutableStateOf(!isMonthlyMode && !existingTask?.recurrenceDaysOfWeek.isNullOrBlank())
     }
     var selectedDaysOfWeek by remember {
         val savedDays = existingTask?.parsedDaysOfWeek().orEmpty()
@@ -186,7 +187,7 @@ fun TaskAddEditSheet(
     }
     var customDaysText by remember {
         mutableStateOf(
-            if (existingTask != null && !isDaysOfWeekMode && existingTask.recurrenceDays != 1 && existingTask.recurrenceDays != 7) {
+            if (existingTask != null && !isMonthlyMode && !isDaysOfWeekMode && existingTask.recurrenceDays != 1 && existingTask.recurrenceDays != 7) {
                 existingTask.recurrenceDays.toString()
             } else ""
         )
@@ -203,6 +204,33 @@ fun TaskAddEditSheet(
             } ?: initialDate
         )
     }
+
+    // Monthly recurrence; the pickers default to the start date's day and weekday.
+    val savedMonthWeekdays = remember { existingTask?.parsedMonthWeekdays().orEmpty() }
+    var monthInterval by remember {
+        mutableIntStateOf(
+            (existingTask?.recurrenceMonths ?: 1).coerceIn(1, TaskEntity.MAX_RECURRENCE_MONTHS)
+        )
+    }
+    var isMonthlyByWeekday by remember { mutableStateOf(savedMonthWeekdays.isNotEmpty()) }
+    var selectedMonthDays by remember {
+        mutableStateOf(existingTask?.parsedMonthDays()?.takeIf { it.isNotEmpty() } ?: setOf(startDate.day))
+    }
+    var selectedMonthOrdinals by remember {
+        mutableStateOf(
+            savedMonthWeekdays.map { it.ordinal }.toSet().takeIf { it.isNotEmpty() }
+                ?: setOf(monthWeekdayOrdinalOf(startDate))
+        )
+    }
+    var selectedMonthWeekdays by remember {
+        mutableStateOf(
+            savedMonthWeekdays.map { it.dayOfWeek }.toSet().takeIf { it.isNotEmpty() }
+                ?: setOf(startDate.dayOfWeek())
+        )
+    }
+
+    // Until the user picks monthly days themselves, opening Monthly follows the current start date.
+    var monthlyFollowsStartDate by remember { mutableStateOf(existingTask?.isMonthlyRecurrence() != true) }
 
     var hasEndDate by remember { mutableStateOf(existingTask?.endDate != null) }
     var endDate by remember {
@@ -438,11 +466,12 @@ fun TaskAddEditSheet(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             // 1. Daily
-                            val isDaily =
-                                !isDaysOfWeekMode && recurrenceDays == 1 && customDaysText.isEmpty()
+                            val isDaily = !isMonthlyMode && !isDaysOfWeekMode &&
+                                recurrenceDays == 1 && customDaysText.isEmpty()
                             FilterChip(
                                 selected = isDaily,
                                 onClick = {
+                                    isMonthlyMode = false
                                     isDaysOfWeekMode = false
                                     recurrenceDays = 1
                                     customDaysText = ""
@@ -461,11 +490,12 @@ fun TaskAddEditSheet(
                             )
 
                             // 2. Weekly
-                            val isWeekly =
-                                !isDaysOfWeekMode && recurrenceDays == 7 && customDaysText.isEmpty()
+                            val isWeekly = !isMonthlyMode && !isDaysOfWeekMode &&
+                                recurrenceDays == 7 && customDaysText.isEmpty()
                             FilterChip(
                                 selected = isWeekly,
                                 onClick = {
+                                    isMonthlyMode = false
                                     isDaysOfWeekMode = false
                                     recurrenceDays = 7
                                     customDaysText = ""
@@ -487,6 +517,7 @@ fun TaskAddEditSheet(
                             FilterChip(
                                 selected = isDaysOfWeekMode,
                                 onClick = {
+                                    isMonthlyMode = false
                                     isDaysOfWeekMode = true
                                     customDaysText = ""
                                     if (selectedDaysOfWeek.isEmpty()) {
@@ -505,9 +536,59 @@ fun TaskAddEditSheet(
                                 } else null,
                                 modifier = Modifier.testTag("recurrence_days_of_week_chip")
                             )
+
+                            // 4. Monthly
+                            FilterChip(
+                                selected = isMonthlyMode,
+                                onClick = {
+                                    isMonthlyMode = true
+                                    isDaysOfWeekMode = false
+                                    customDaysText = ""
+                                    if (monthlyFollowsStartDate) {
+                                        selectedMonthDays = setOf(startDate.day)
+                                        selectedMonthOrdinals = setOf(monthWeekdayOrdinalOf(startDate))
+                                        selectedMonthWeekdays = setOf(startDate.dayOfWeek())
+                                    }
+                                },
+                                label = { Text("Monthly") },
+                                leadingIcon = if (isMonthlyMode) {
+                                    {
+                                        Icon(
+                                            Icons.Default.CalendarMonth,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                } else null,
+                                modifier = Modifier.testTag("recurrence_monthly_chip")
+                            )
                         }
 
-                        if (isDaysOfWeekMode) {
+                        if (isMonthlyMode) {
+                            MonthlyRecurrencePicker(
+                                monthInterval = monthInterval,
+                                onMonthIntervalChange = {
+                                    monthInterval = it.coerceIn(1, TaskEntity.MAX_RECURRENCE_MONTHS)
+                                },
+                                byWeekday = isMonthlyByWeekday,
+                                onByWeekdayChange = { isMonthlyByWeekday = it },
+                                selectedDays = selectedMonthDays,
+                                onSelectedDaysChange = {
+                                    selectedMonthDays = it
+                                    monthlyFollowsStartDate = false
+                                },
+                                selectedOrdinals = selectedMonthOrdinals,
+                                onSelectedOrdinalsChange = {
+                                    selectedMonthOrdinals = it
+                                    monthlyFollowsStartDate = false
+                                },
+                                selectedWeekdays = selectedMonthWeekdays,
+                                onSelectedWeekdaysChange = {
+                                    selectedMonthWeekdays = it
+                                    monthlyFollowsStartDate = false
+                                }
+                            )
+                        } else if (isDaysOfWeekMode) {
                             // Days of week selector card
                             Column(
                                 modifier = Modifier
@@ -839,8 +920,9 @@ fun TaskAddEditSheet(
 
                 Button(
                     onClick = {
+                        val monthly = isRecurring && isMonthlyMode
                         val selectedDaysString =
-                            if (isDaysOfWeekMode && selectedDaysOfWeek.isNotEmpty()) {
+                            if (!monthly && isDaysOfWeekMode && selectedDaysOfWeek.isNotEmpty()) {
                                 selectedDaysOfWeek.sorted().joinToString(",")
                             } else null
 
@@ -854,10 +936,19 @@ fun TaskAddEditSheet(
                             priority = priority,
                             colorHex = selectedColor,
                             isRecurring = isRecurring,
-                            recurrenceDays = if (isRecurring) {
+                            recurrenceDays = if (isRecurring && !monthly) {
                                 if (isDaysOfWeekMode) 7 else recurrenceDays.coerceAtLeast(1)
                             } else 1,
                             recurrenceDaysOfWeek = if (isRecurring) selectedDaysString else null,
+                            recurrenceMonthDays = if (monthly && !isMonthlyByWeekday) {
+                                TaskEntity.formatMonthDays(selectedMonthDays)
+                            } else null,
+                            recurrenceMonthWeekdays = if (monthly && isMonthlyByWeekday) {
+                                TaskEntity.formatMonthWeekdays(
+                                    monthWeekdayRules(selectedMonthOrdinals, selectedMonthWeekdays)
+                                )
+                            } else null,
+                            recurrenceMonths = if (monthly) monthInterval else 1,
                             startDate = startDate.toIsoString(),
                             endDate = if (isRecurring && hasEndDate) endDate.toIsoString() else null,
                             sharedSubtasks = !isRecurring || sharedSubtasks

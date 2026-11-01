@@ -43,6 +43,44 @@ class BackupSerializationTest {
     }
 
     @Test
+    fun monthlyRecurrence_survivesBackupRoundTrip() {
+        val byDate = TaskEntity(
+            id = 1,
+            title = "Rent",
+            isRecurring = true,
+            recurrenceMonthDays = "1,31",
+            recurrenceMonths = 2,
+            startDate = "2026-11-01"
+        )
+        val byWeekday = TaskEntity(
+            id = 2,
+            title = "Review",
+            isRecurring = true,
+            recurrenceMonthWeekdays = "1:1,-1:5",
+            startDate = "2026-11-01"
+        )
+        val json = backupManager.exportBackupJson(listOf(byDate, byWeekday), emptyList())
+        val restored = backupManager.parseBackupJson(json).tasks.associateBy { it.id }
+
+        assertEquals("1,31", restored[1]?.recurrenceMonthDays)
+        assertEquals(2, restored[1]?.recurrenceMonths)
+        assertEquals("1:1,-1:5", restored[2]?.recurrenceMonthWeekdays)
+        assertEquals(1, restored[2]?.recurrenceMonths)
+    }
+
+    @Test
+    fun olderBackupsWithoutMonthlyFields_restoreAsBefore() {
+        val json = """{"version":4,"tasks":[{"id":3,"title":"Old","isRecurring":true,""" +
+            """"recurrenceDays":3,"startDate":"2026-11-01"}]}"""
+        val task = backupManager.parseBackupJson(json).tasks.single()
+
+        assertEquals(null, task.recurrenceMonthDays)
+        assertEquals(null, task.recurrenceMonthWeekdays)
+        assertEquals(1, task.recurrenceMonths)
+        assertEquals(3, task.recurrenceDays)
+    }
+
+    @Test
     fun malformedBackupsNeverEraseExistingData() = runBlocking {
         val task = TaskEntity(id = 42, title = "Keep me", startDate = "2026-10-01")
         val category = CategoryEntity("General", 0xFF3B82F6, "general", true)
