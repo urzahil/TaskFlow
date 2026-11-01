@@ -1,6 +1,7 @@
 package rocks.urzahil.taskflow.data.repository
 
 import rocks.urzahil.taskflow.data.model.AppDate
+import rocks.urzahil.taskflow.data.model.MonthWeekday
 import rocks.urzahil.taskflow.data.model.TaskEntity
 import rocks.urzahil.taskflow.data.model.TaskOccurrenceExclusionEntity
 
@@ -21,14 +22,54 @@ class TaskSchedule private constructor(
     /** Days between occurrences when [weekdays] is empty; always at least 1. */
     val interval: Int,
     /** ISO weekdays (1 = Monday) the task repeats on; empty for every-N-days tasks. */
-    val weekdays: Set<Int>
+    val weekdays: Set<Int>,
+    /** Days of the month (1..31) for monthly tasks; a day a month lacks falls on its last day. */
+    val monthDays: Set<Int> = emptySet(),
+    /** "Nth weekday of the month" rules for monthly tasks. */
+    val monthWeekdays: Set<MonthWeekday> = emptySet(),
+    /** Months between active months for monthly tasks, counted from [start]'s month; at least 1. */
+    val monthInterval: Int = 1
 ) {
+    /** True when the task repeats monthly; monthly rules take precedence over the others. */
+    val isMonthly: Boolean get() = monthDays.isNotEmpty() || monthWeekdays.isNotEmpty()
+
     fun isScheduledOn(date: AppDate): Boolean {
         if (!isRecurring) return date == start
         if (date < start) return false
         if (end != null && date > end) return false
+        if (isMonthly) return isMonthlyOccurrence(date)
         if (weekdays.isNotEmpty()) return date.dayOfWeek() in weekdays
         return date.daysBetween(start) % interval == 0L
+    }
+
+    private fun isMonthlyOccurrence(date: AppDate): Boolean {
+        val monthsSinceStart = (date.year - start.year) * 12 + (date.month - start.month)
+        if (monthsSinceStart % monthInterval != 0) return false
+        if (monthWeekdays.isNotEmpty()) return monthWeekdays.any { it.matches(date) }
+        val lastDay = AppDate.daysInMonth(date.year, date.month)
+        // A day past the end of the month (e.g. the 31st in April) falls on the last day.
+        return date.day in monthDays || (date.day == lastDay && monthDays.any { it > lastDay })
+    }
+
+    /**
+     * The first scheduled date on or after [from], or null when there is none (the task has
+     * ended). Recurring tasks always repeat within [interval] days, a week, or [monthInterval]
+     * months, so the search is bounded.
+     */
+    fun firstOccurrenceOnOrAfter(from: AppDate): AppDate? {
+        val first = maxOf(from, start)
+        if (!isRecurring) return start.takeIf { it >= from }
+        val searchDays = when {
+            isMonthly -> (monthInterval + 1) * 31L
+            weekdays.isNotEmpty() -> 7L
+            else -> interval.toLong()
+        }
+        for (offset in 0L until searchDays) {
+            val date = first.plusDays(offset)
+            if (end != null && date > end) return null
+            if (isScheduledOn(date)) return date
+        }
+        return null
     }
 
     companion object {
@@ -53,7 +94,10 @@ class TaskSchedule private constructor(
                 start = start,
                 end = end,
                 interval = if (task.recurrenceDays > 0) task.recurrenceDays else 1,
-                weekdays = task.parsedDaysOfWeek()
+                weekdays = task.parsedDaysOfWeek(),
+                monthDays = task.parsedMonthDays(),
+                monthWeekdays = task.parsedMonthWeekdays(),
+                monthInterval = task.recurrenceMonths.coerceIn(1, TaskEntity.MAX_RECURRENCE_MONTHS)
             )
         }
     }
