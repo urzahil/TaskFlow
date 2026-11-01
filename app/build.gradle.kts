@@ -15,8 +15,8 @@ android {
         minSdk = 24
         targetSdk = 36
         // Must increase with every APK handed out, or installs refuse it as an update.
-        versionCode = 42
-        versionName = "2.15.4"
+        versionCode = 43
+        versionName = "2.15.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
