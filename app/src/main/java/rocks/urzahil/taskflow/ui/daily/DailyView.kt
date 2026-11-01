@@ -88,6 +88,7 @@ import rocks.urzahil.taskflow.data.model.AppDate
 import rocks.urzahil.taskflow.data.model.TaskEntity
 import rocks.urzahil.taskflow.ui.DailyStats
 import rocks.urzahil.taskflow.ui.model.DaySummaryUi
+import rocks.urzahil.taskflow.ui.model.RecurrenceLabels
 import rocks.urzahil.taskflow.ui.model.SubtaskItemUi
 import rocks.urzahil.taskflow.ui.model.TaskFilter
 import rocks.urzahil.taskflow.ui.model.TaskItemUi
@@ -1016,6 +1017,13 @@ fun TaskCardItem(
 }
 
 private fun formatRecurrenceLabel(task: TaskEntity): String {
+    if (task.isMonthlyRecurrence()) {
+        return RecurrenceLabels.monthly(
+            task.recurrenceMonths,
+            task.parsedMonthDays(),
+            task.parsedMonthWeekdays()
+        )
+    }
     val days = task.parsedDaysOfWeek().sorted()
     if (days.isNotEmpty()) {
         return when {

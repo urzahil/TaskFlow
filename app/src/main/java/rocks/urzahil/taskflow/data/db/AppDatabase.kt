@@ -25,7 +25,7 @@ import rocks.urzahil.taskflow.data.model.TaskOccurrenceExclusionEntity
         SubtaskCompletionEntity::class,
         SubtaskExclusionEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -181,6 +181,14 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tasks ADD COLUMN recurrenceMonthDays TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE tasks ADD COLUMN recurrenceMonthWeekdays TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE tasks ADD COLUMN recurrenceMonths INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -194,7 +202,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_3_4,
                         MIGRATION_4_5,
                         MIGRATION_5_6,
-                        MIGRATION_6_7
+                        MIGRATION_6_7,
+                        MIGRATION_7_8
                     )
                     // Keep the database a single self-contained file (no -wal/-shm) so Auto Backup
                     // can never capture an inconsistent set of files.

@@ -47,7 +47,9 @@ object TaskScheduler {
             val lastPastDate = minOf(today.minusDays(1), end ?: today.minusDays(1))
             if (start <= lastPastDate) {
                 val span = lastPastDate.daysBetween(start) + 1
-                val count = if (weekdays.isEmpty()) {
+                val count = if (schedule.isMonthly) {
+                    (0L until span).count { schedule.isScheduledOn(start.plusDays(it)) }.toLong()
+                } else if (weekdays.isEmpty()) {
                     (span - 1) / schedule.interval + 1
                 } else {
                     (span / 7) * weekdays.size + (0L until span % 7).count {
@@ -69,7 +71,10 @@ object TaskScheduler {
             }
 
             if (start < today) {
-                val nextOccurrence = if (weekdays.isNotEmpty()) {
+                val nextOccurrence: AppDate? = if (schedule.isMonthly) {
+                    // Null when the end date comes before the next monthly occurrence.
+                    schedule.firstOccurrenceOnOrAfter(today)
+                } else if (weekdays.isNotEmpty()) {
                     // Weekdays are always within 1..7, so one of the next seven days matches.
                     (0L..6L).map { today.plusDays(it) }.first { it.dayOfWeek() in weekdays }
                 } else {
@@ -77,7 +82,7 @@ object TaskScheduler {
                     today.plusDays(if (remainder == 0L) 0L else schedule.interval - remainder)
                 }
 
-                if (end != null && nextOccurrence > end) {
+                if (nextOccurrence == null || (end != null && nextOccurrence > end)) {
                     tasksToDelete.add(task)
                     cleanedCount++
                     continue
