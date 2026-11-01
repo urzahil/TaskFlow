@@ -98,6 +98,7 @@ class TaskViewModel(
         // Holds the tasks toggled away from the default collapse state (the key predates the setting).
         private const val KEY_COLLAPSED_SUBTASK_TASK_IDS = "collapsed_subtask_task_ids"
         private const val KEY_SUBTASKS_COLLAPSED_BY_DEFAULT = "subtasks_collapsed_by_default"
+        private const val KEY_HIDE_COMPLETED_IN_LIST = "hide_completed_in_list"
     }
 
     private val userPrefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -226,7 +227,18 @@ class TaskViewModel(
         userPrefs?.edit()?.putBoolean(KEY_SHOW_DAILY_PROGRESS, show)?.apply()
     }
 
-    // Whether tasks show their subtasks collapsed in the Daily view unless toggled.
+    // Whether the List view drops tasks and subtasks as soon as they are completed.
+    private val _hideCompletedInList = MutableStateFlow(
+        userPrefs?.getBoolean(KEY_HIDE_COMPLETED_IN_LIST, false) ?: false
+    )
+    val hideCompletedInList: StateFlow<Boolean> = _hideCompletedInList.asStateFlow()
+
+    fun setHideCompletedInList(hide: Boolean) {
+        _hideCompletedInList.value = hide
+        userPrefs?.edit()?.putBoolean(KEY_HIDE_COMPLETED_IN_LIST, hide)?.apply()
+    }
+
+    // Whether tasks show their subtasks collapsed (Daily, Monthly and List views) unless toggled.
     private val _subtasksCollapsedByDefault = MutableStateFlow(
         userPrefs?.getBoolean(KEY_SUBTASKS_COLLAPSED_BY_DEFAULT, false) ?: false
     )

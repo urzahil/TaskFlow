@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
@@ -115,6 +116,8 @@ fun SettingsScreen(
     onToggleShowMonthlyView: (Boolean) -> Unit = {},
     showListView: Boolean = true,
     onToggleShowListView: (Boolean) -> Unit = {},
+    hideCompletedInList: Boolean = false,
+    onToggleHideCompletedInList: (Boolean) -> Unit = {},
     startViewMode: ViewMode = ViewMode.DAILY,
     onSelectStartViewMode: (ViewMode) -> Unit = {},
     rolloverCleanupEnabled: Boolean = true,
@@ -753,6 +756,62 @@ fun SettingsScreen(
                         )
                     }
 
+                    if (showListView) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+
+                        // Hide completed tasks in List view
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onToggleHideCompletedInList(!hideCompletedInList) }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.DoneAll,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Hide completed in List view",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Remove tasks and subtasks from the List tab once completed",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = hideCompletedInList,
+                                onCheckedChange = onToggleHideCompletedInList,
+                                modifier = Modifier.testTag("toggle_hide_completed_in_list_switch")
+                            )
+                        }
+                    }
+
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                         modifier = Modifier.padding(horizontal = 12.dp)
@@ -848,7 +907,7 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "Start tasks with subtasks minimised in Daily view",
+                                    text = "Start tasks with subtasks minimised in every view",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

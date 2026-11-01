@@ -28,9 +28,28 @@ fun ListView(
     days: List<DayTasksGroupUi>,
     onToggleTask: (TaskItemUi) -> Unit,
     onToggleSubtask: (TaskItemUi, SubtaskItemUi) -> Unit = { _, _ -> },
+    hideCompleted: Boolean = false,
+    subtaskCollapseOverrides: Set<Long> = emptySet(),
+    subtasksCollapsedByDefault: Boolean = false,
+    onToggleSubtasksCollapsed: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val daysWithTasks = remember(days) { days.filter { it.tasks.isNotEmpty() } }
+    val daysWithTasks = remember(days, hideCompleted) {
+        val visibleDays = if (hideCompleted) {
+            // Completed tasks and checked subtasks drop out as soon as they are completed.
+            days.map { day ->
+                day.copy(
+                    tasks = day.tasks
+                        .filterNot { it.isCompleted }
+                        .map { task -> task.copy(subtasks = task.subtasks.filterNot { it.isChecked }) }
+                )
+            }
+        } else {
+            days
+        }
+        visibleDays.filter { it.tasks.isNotEmpty() }
+    }
+    val allCompletedHidden = hideCompleted && days.any { it.tasks.isNotEmpty() }
 
     if (daysWithTasks.isEmpty()) {
         Box(
@@ -45,13 +64,17 @@ fun ListView(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "No upcoming tasks",
+                    text = if (allCompletedHidden) "All caught up" else "No upcoming tasks",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "No tasks scheduled for the next 7 days.",
+                    text = if (allCompletedHidden) {
+                        "Every task for the next 7 days is completed."
+                    } else {
+                        "No tasks scheduled for the next 7 days."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -94,7 +117,10 @@ fun ListView(
                                 taskItem = taskItem,
                                 onToggle = { onToggleTask(taskItem) },
                                 tagPrefix = "list",
-                                onToggleSubtask = { onToggleSubtask(taskItem, it) }
+                                onToggleSubtask = { onToggleSubtask(taskItem, it) },
+                                isSubtasksCollapsed =
+                                    (taskItem.task.id in subtaskCollapseOverrides) != subtasksCollapsedByDefault,
+                                onToggleSubtasksCollapsed = { onToggleSubtasksCollapsed(taskItem.task.id) }
                             )
                         }
                     }

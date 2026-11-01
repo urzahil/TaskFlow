@@ -93,6 +93,7 @@ fun MainScreen(
     val showDailyProgress by viewModel.showDailyProgress.collectAsStateWithLifecycle()
     val subtaskCollapseOverrides by viewModel.subtaskCollapseOverrides.collectAsStateWithLifecycle()
     val subtasksCollapsedByDefault by viewModel.subtasksCollapsedByDefault.collectAsStateWithLifecycle()
+    val hideCompletedInList by viewModel.hideCompletedInList.collectAsStateWithLifecycle()
     val isDarkMode by viewModel.isDarkMode.collectAsStateWithLifecycle()
     val useDynamicColors by viewModel.useDynamicColors.collectAsStateWithLifecycle()
     val showMonthlyTaskList by viewModel.showMonthlyTaskList.collectAsStateWithLifecycle()
@@ -455,7 +456,10 @@ fun MainScreen(
                         onToggleSubtask = { task, subtask -> viewModel.toggleSubtask(task, subtask) },
                         onSwitchToDailyView = { viewModel.setViewMode(ViewMode.DAILY) },
                         currentToday = currentToday,
-                        showMonthlyTaskList = showMonthlyTaskList
+                        showMonthlyTaskList = showMonthlyTaskList,
+                        subtaskCollapseOverrides = subtaskCollapseOverrides,
+                        subtasksCollapsedByDefault = subtasksCollapsedByDefault,
+                        onToggleSubtasksCollapsed = { viewModel.toggleSubtasksCollapsed(it) }
                     )
                 }
 
@@ -464,7 +468,11 @@ fun MainScreen(
                     ListView(
                         days = next7DaysTasks,
                         onToggleTask = { viewModel.toggleTaskCompletion(it) },
-                        onToggleSubtask = { task, subtask -> viewModel.toggleSubtask(task, subtask) }
+                        onToggleSubtask = { task, subtask -> viewModel.toggleSubtask(task, subtask) },
+                        hideCompleted = hideCompletedInList,
+                        subtaskCollapseOverrides = subtaskCollapseOverrides,
+                        subtasksCollapsedByDefault = subtasksCollapsedByDefault,
+                        onToggleSubtasksCollapsed = { viewModel.toggleSubtasksCollapsed(it) }
                     )
                 }
 
@@ -539,6 +547,8 @@ fun MainScreen(
                         onToggleShowMonthlyView = { viewModel.setShowMonthlyView(it) },
                         showListView = showListView,
                         onToggleShowListView = { viewModel.setShowListView(it) },
+                        hideCompletedInList = hideCompletedInList,
+                        onToggleHideCompletedInList = { viewModel.setHideCompletedInList(it) },
                         startViewMode = startViewMode,
                         onSelectStartViewMode = { viewModel.setStartViewMode(it) }
                     )

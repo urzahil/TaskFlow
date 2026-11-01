@@ -66,6 +66,9 @@ fun MonthlyView(
     onSwitchToDailyView: () -> Unit,
     currentToday: AppDate = AppDate.today(),
     showMonthlyTaskList: Boolean = true,
+    subtaskCollapseOverrides: Set<Long> = emptySet(),
+    subtasksCollapsedByDefault: Boolean = false,
+    onToggleSubtasksCollapsed: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val (year, month) = yearMonth
@@ -305,7 +308,10 @@ fun MonthlyView(
                                 taskItem = taskItem,
                                 onToggle = { onToggleTask(taskItem) },
                                 tagPrefix = "monthly",
-                                onToggleSubtask = { onToggleSubtask(taskItem, it) }
+                                onToggleSubtask = { onToggleSubtask(taskItem, it) },
+                                isSubtasksCollapsed =
+                                    (taskItem.task.id in subtaskCollapseOverrides) != subtasksCollapsedByDefault,
+                                onToggleSubtasksCollapsed = { onToggleSubtasksCollapsed(taskItem.task.id) }
                             )
                         }
                     }
