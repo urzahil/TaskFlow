@@ -332,6 +332,23 @@ interface TaskDao {
     @Query("UPDATE tasks SET startDate = :newStartDate WHERE id = :taskId")
     suspend fun updateTaskStartDate(taskId: Long, newStartDate: String)
 
+    /**
+     * Moves a one-time task's past subtask checks to [newDate], so rolling the task over keeps
+     * the subtasks already completed. Its subtasks are undated, but their checks are per date.
+     */
+    @Query(
+        "UPDATE OR REPLACE subtask_completions SET date = :newDate WHERE date < :newDate AND " +
+            "subtaskId IN (SELECT id FROM subtasks WHERE taskId = :taskId)"
+    )
+    suspend fun moveSubtaskCompletionsTo(taskId: Long, newDate: String)
+
+    /** Like [moveSubtaskCompletionsTo], for the subtasks removed from the task's old date. */
+    @Query(
+        "UPDATE OR REPLACE subtask_exclusions SET date = :newDate WHERE date < :newDate AND " +
+            "subtaskId IN (SELECT id FROM subtasks WHERE taskId = :taskId)"
+    )
+    suspend fun moveSubtaskExclusionsTo(taskId: Long, newDate: String)
+
     @Transaction
     suspend fun performCleanupAndRolloverBatch(
         tasksToDelete: List<TaskEntity>,
@@ -353,6 +370,10 @@ interface TaskDao {
         for (task in tasksToUpdate) {
             if (task.id !in deletedTaskIds) {
                 updateTaskStartDate(task.id, task.startDate)
+                if (!task.isRecurring) {
+                    moveSubtaskCompletionsTo(task.id, task.startDate)
+                    moveSubtaskExclusionsTo(task.id, task.startDate)
+                }
             }
         }
         deleteCompletionsBefore(todayIso)

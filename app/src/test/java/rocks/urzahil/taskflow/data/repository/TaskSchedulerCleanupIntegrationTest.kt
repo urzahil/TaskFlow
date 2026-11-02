@@ -4,8 +4,12 @@ import androidx.room.Room
 import rocks.urzahil.taskflow.data.db.AppDatabase
 import rocks.urzahil.taskflow.data.db.TaskDao
 import rocks.urzahil.taskflow.data.model.AppDate
+import rocks.urzahil.taskflow.data.model.SubtaskCompletionEntity
+import rocks.urzahil.taskflow.data.model.SubtaskEntity
+import rocks.urzahil.taskflow.data.model.SubtaskExclusionEntity
 import rocks.urzahil.taskflow.data.model.TaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.TaskEntity
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -175,6 +179,45 @@ class TaskSchedulerCleanupIntegrationTest {
 
         assertEquals(1, result.cleanedCount)
         assertNull(dao.getTaskById(taskId))
+    }
+
+    @Test
+    fun rolledOverOneOffTaskKeepsItsCompletedSubtasks() = runBlocking {
+        val today = AppDate(2026, 10, 13)
+        val oldDate = "2026-10-10"
+        val taskId = dao.insertTask(task("Partly done", oldDate))
+        val doneId = dao.insertSubtask(SubtaskEntity(taskId = taskId, title = "Done", position = 0))
+        val openId = dao.insertSubtask(SubtaskEntity(taskId = taskId, title = "Open", position = 1))
+        val removedId = dao.insertSubtask(SubtaskEntity(taskId = taskId, title = "Removed", position = 2))
+        dao.toggleSubtask(taskId, doneId, oldDate)
+        dao.removeSubtaskOn(taskId, removedId, oldDate, shared = true)
+
+        val result = TaskScheduler.cleanupAndRolloverTasks(dao, today)
+
+        val todayIso = today.toIsoString()
+        assertEquals(1, result.movedCount)
+        assertEquals(todayIso, dao.getTaskById(taskId)?.startDate)
+        assertEquals(1, dao.countSubtaskCompletion(doneId, todayIso))
+        assertEquals(0, dao.countSubtaskCompletion(openId, todayIso))
+        assertTrue(dao.getAllSubtaskCompletions().first().all { it.date == todayIso })
+        assertEquals(listOf(doneId, openId), dao.getShownSubtaskIds(taskId, todayIso).sorted())
+        assertEquals(
+            listOf(SubtaskExclusionEntity(removedId, todayIso)),
+            dao.getAllSubtaskExclusions().first()
+        )
+    }
+
+    @Test
+    fun recurringTaskSubtaskChecksStayOnTheirOwnDates() = runBlocking {
+        val today = AppDate(2026, 10, 13)
+        val taskId = dao.insertTask(task("Daily", "2026-10-10", isRecurring = true))
+        val subtaskId = dao.insertSubtask(SubtaskEntity(taskId = taskId, title = "Step"))
+        dao.insertSubtaskCompletion(SubtaskCompletionEntity(subtaskId, "2026-10-12"))
+
+        TaskScheduler.cleanupAndRolloverTasks(dao, today)
+
+        assertEquals(1, dao.countSubtaskCompletion(subtaskId, "2026-10-12"))
+        assertEquals(0, dao.countSubtaskCompletion(subtaskId, today.toIsoString()))
     }
 
     private fun task(
