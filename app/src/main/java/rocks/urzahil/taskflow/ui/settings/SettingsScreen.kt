@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.UnfoldLess
+import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -118,6 +119,8 @@ fun SettingsScreen(
     onToggleShowListView: (Boolean) -> Unit = {},
     hideCompletedInList: Boolean = false,
     onToggleHideCompletedInList: (Boolean) -> Unit = {},
+    collapsibleDaysInList: Boolean = false,
+    onToggleCollapsibleDaysInList: (Boolean) -> Unit = {},
     startViewMode: ViewMode = ViewMode.DAILY,
     onSelectStartViewMode: (ViewMode) -> Unit = {},
     rolloverCleanupEnabled: Boolean = true,
@@ -808,6 +811,60 @@ fun SettingsScreen(
                                 checked = hideCompletedInList,
                                 onCheckedChange = onToggleHideCompletedInList,
                                 modifier = Modifier.testTag("toggle_hide_completed_in_list_switch")
+                            )
+                        }
+
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+
+                        // Collapsible days in List view
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onToggleCollapsibleDaysInList(!collapsibleDaysInList) }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.UnfoldMore,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Collapsible days in List view",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Tap a day to hide or show its tasks",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = collapsibleDaysInList,
+                                onCheckedChange = onToggleCollapsibleDaysInList,
+                                modifier = Modifier.testTag("toggle_collapsible_days_in_list_switch")
                             )
                         }
                     }
