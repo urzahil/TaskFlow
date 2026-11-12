@@ -64,19 +64,19 @@ class ListViewCollapsibleDaysTest {
         }
 
         composeRule.onNodeWithTag("list_task_item_1").assertIsDisplayed()
-        composeRule.onNodeWithTag("list_day_chevron_0").assertDoesNotExist()
+        composeRule.onNodeWithTag("list_day_chevron_0", useUnmergedTree = true).assertDoesNotExist()
 
         composeRule.onNodeWithTag("list_day_header_0").performClick()
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("list_task_item_1").assertDoesNotExist()
-        composeRule.onNodeWithTag("list_day_chevron_0").assertIsDisplayed()
+        composeRule.onNodeWithTag("list_day_chevron_0", useUnmergedTree = true).assertIsDisplayed()
 
         composeRule.onNodeWithTag("list_day_header_0").performClick()
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("list_task_item_1").assertIsDisplayed()
-        composeRule.onNodeWithTag("list_day_chevron_0").assertDoesNotExist()
+        composeRule.onNodeWithTag("list_day_chevron_0", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
@@ -98,7 +98,7 @@ class ListViewCollapsibleDaysTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("list_task_item_1").assertIsDisplayed()
-        composeRule.onNodeWithTag("list_day_chevron_0").assertDoesNotExist()
+        composeRule.onNodeWithTag("list_day_chevron_0", useUnmergedTree = true).assertDoesNotExist()
         assertFalse("Header must not toggle while days are not collapsible", toggled)
     }
 }
