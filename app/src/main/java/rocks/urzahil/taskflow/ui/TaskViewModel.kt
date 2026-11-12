@@ -102,6 +102,9 @@ class TaskViewModel(
         private const val KEY_LEGACY_COLLAPSED_SUBTASK_TASK_IDS = "collapsed_subtask_task_ids"
         private const val KEY_SUBTASKS_COLLAPSED_BY_DEFAULT = "subtasks_collapsed_by_default"
         private const val KEY_HIDE_COMPLETED_IN_LIST = "hide_completed_in_list"
+        private const val KEY_COLLAPSIBLE_DAYS_IN_LIST = "collapsible_days_in_list"
+        // ISO dates of the List view days the user collapsed.
+        private const val KEY_COLLAPSED_LIST_DAYS = "collapsed_list_days"
 
         // Views that show tasks with collapsible subtasks; each keeps its own collapse state.
         val SUBTASK_COLLAPSE_VIEWS = listOf(ViewMode.DAILY, ViewMode.MONTHLY, ViewMode.LIST)
@@ -242,6 +245,54 @@ class TaskViewModel(
     fun setHideCompletedInList(hide: Boolean) {
         _hideCompletedInList.value = hide
         userPrefs?.edit()?.putBoolean(KEY_HIDE_COMPLETED_IN_LIST, hide)?.apply()
+    }
+
+    // Whether tapping a day header in the List view collapses that day.
+    private val _collapsibleDaysInList = MutableStateFlow(
+        userPrefs?.getBoolean(KEY_COLLAPSIBLE_DAYS_IN_LIST, false) ?: false
+    )
+    val collapsibleDaysInList: StateFlow<Boolean> = _collapsibleDaysInList.asStateFlow()
+
+    fun setCollapsibleDaysInList(enabled: Boolean) {
+        if (_collapsibleDaysInList.value == enabled) return
+        _collapsibleDaysInList.value = enabled
+        userPrefs?.edit()?.putBoolean(KEY_COLLAPSIBLE_DAYS_IN_LIST, enabled)?.apply()
+        // Turning the option off drops collapsed days so re-enabling starts fully expanded.
+        if (!enabled) setCollapsedListDays(emptySet())
+    }
+
+    // The List view days currently collapsed. Days before today are dropped on load so stale
+    // entries do not accumulate, and the pruned set is persisted.
+    private val _collapsedListDays = MutableStateFlow(loadCollapsedListDays())
+    val collapsedListDays: StateFlow<Set<AppDate>> = _collapsedListDays.asStateFlow()
+
+    private fun loadCollapsedListDays(): Set<AppDate> {
+        val stored = userPrefs?.getStringSet(KEY_COLLAPSED_LIST_DAYS, emptySet()).orEmpty()
+        val today = AppDate.today()
+        val upcoming = stored
+            .mapNotNull { runCatching { AppDate.parseIso(it) }.getOrNull() }
+            .filter { it >= today }
+            .toSet()
+        if (upcoming.size != stored.size) persistCollapsedListDays(upcoming)
+        return upcoming
+    }
+
+    fun toggleListDayCollapsed(date: AppDate) {
+        if (!_collapsibleDaysInList.value) return
+        val current = _collapsedListDays.value
+        setCollapsedListDays(if (date in current) current - date else current + date)
+    }
+
+    private fun setCollapsedListDays(days: Set<AppDate>) {
+        if (_collapsedListDays.value == days) return
+        _collapsedListDays.value = days
+        persistCollapsedListDays(days)
+    }
+
+    private fun persistCollapsedListDays(days: Set<AppDate>) {
+        userPrefs?.edit()
+            ?.putStringSet(KEY_COLLAPSED_LIST_DAYS, days.map { it.toIsoString() }.toSet())
+            ?.apply()
     }
 
     // Whether tasks show their subtasks collapsed (Daily, Monthly and List views) unless toggled.

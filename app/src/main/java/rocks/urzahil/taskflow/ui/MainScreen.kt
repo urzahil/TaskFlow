@@ -94,6 +94,8 @@ fun MainScreen(
     val subtaskCollapseOverrides by viewModel.subtaskCollapseOverrides.collectAsStateWithLifecycle()
     val subtasksCollapsedByDefault by viewModel.subtasksCollapsedByDefault.collectAsStateWithLifecycle()
     val hideCompletedInList by viewModel.hideCompletedInList.collectAsStateWithLifecycle()
+    val collapsibleDaysInList by viewModel.collapsibleDaysInList.collectAsStateWithLifecycle()
+    val collapsedListDays by viewModel.collapsedListDays.collectAsStateWithLifecycle()
     val isDarkMode by viewModel.isDarkMode.collectAsStateWithLifecycle()
     val useDynamicColors by viewModel.useDynamicColors.collectAsStateWithLifecycle()
     val showMonthlyTaskList by viewModel.showMonthlyTaskList.collectAsStateWithLifecycle()
@@ -472,7 +474,10 @@ fun MainScreen(
                         hideCompleted = hideCompletedInList,
                         subtaskCollapseOverrides = subtaskCollapseOverrides[ViewMode.LIST].orEmpty(),
                         subtasksCollapsedByDefault = subtasksCollapsedByDefault,
-                        onToggleSubtasksCollapsed = { viewModel.toggleSubtasksCollapsed(ViewMode.LIST, it) }
+                        onToggleSubtasksCollapsed = { viewModel.toggleSubtasksCollapsed(ViewMode.LIST, it) },
+                        collapsibleDays = collapsibleDaysInList,
+                        collapsedDays = collapsedListDays,
+                        onToggleDayCollapsed = { viewModel.toggleListDayCollapsed(it) }
                     )
                 }
 
@@ -549,6 +554,8 @@ fun MainScreen(
                         onToggleShowListView = { viewModel.setShowListView(it) },
                         hideCompletedInList = hideCompletedInList,
                         onToggleHideCompletedInList = { viewModel.setHideCompletedInList(it) },
+                        collapsibleDaysInList = collapsibleDaysInList,
+                        onToggleCollapsibleDaysInList = { viewModel.setCollapsibleDaysInList(it) },
                         startViewMode = startViewMode,
                         onSelectStartViewMode = { viewModel.setStartViewMode(it) }
                     )
