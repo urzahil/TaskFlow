@@ -71,10 +71,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -82,6 +85,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import rocks.urzahil.taskflow.data.model.AppDate
@@ -960,13 +964,32 @@ fun TaskCardItem(
                 },
                 title = { Text("Add Subtask") },
                 text = {
+                    val subtaskFocusRequester = remember { FocusRequester() }
+                    val keyboardController = LocalSoftwareKeyboardController.current
+                    LaunchedEffect(Unit) {
+                        // Focus the input and show the keyboard as soon as the dialog opens.
+                        // The dialog window may not be attached yet on the first frame, so retry once.
+                        try {
+                            subtaskFocusRequester.requestFocus()
+                            keyboardController?.show()
+                        } catch (_: Exception) {
+                            delay(150)
+                            try {
+                                subtaskFocusRequester.requestFocus()
+                                keyboardController?.show()
+                            } catch (_: Exception) {
+                            }
+                        }
+                    }
                     OutlinedTextField(
                         value = newSubtaskTitle,
                         onValueChange = { newSubtaskTitle = it },
                         label = { Text("Subtask") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(subtaskFocusRequester),
                         shape = RoundedCornerShape(12.dp)
                     )
                 },
