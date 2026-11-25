@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import rocks.urzahil.taskflow.data.drive.DriveConnectStep
+import rocks.urzahil.taskflow.data.drive.DriveBackupWorker
 import rocks.urzahil.taskflow.data.drive.GoogleDriveBackupManager
 import rocks.urzahil.taskflow.data.db.CategoryNameConflictException
 import rocks.urzahil.taskflow.data.db.LastDefaultCategoryException
@@ -79,6 +80,7 @@ class TaskViewModel(
 
     companion object {
         const val DEFAULT_AUTO_BACKUP_DEBOUNCE_MS = 800L
+        private const val WORKER_BACKUP_DELAY_MS = 60_000L
         private const val PREFS_NAME = "taskflow_user_prefs"
         private const val KEY_SHOW_DAILY_PROGRESS = "show_daily_progress"
         private const val KEY_IS_DARK_MODE = "is_dark_mode"
@@ -565,6 +567,8 @@ class TaskViewModel(
                     }
                     _maintenanceMessage.value =
                         details.joinToString(", ").replaceFirstChar { it.uppercase() } + "."
+                    // Rollover rewrote or deleted tasks: back that up like any other change.
+                    triggerAutoBackup()
                 } else if (!isForegroundCheck) {
                     _maintenanceMessage.value =
                         "Tasks are up to date for today. No rollover needed."
@@ -1009,6 +1013,13 @@ class TaskViewModel(
 
         isAutoBackupPending = true
         driveBackupManager.setBackupPendingDurable(true)
+        // Safety net if the app is closed before the in-process upload runs: WorkManager uploads
+        // once online. When the in-process upload succeeds first, the pending flag is clear and
+        // the worker does nothing.
+        context?.let {
+            // Best effort: a scheduling problem must never break editing.
+            runCatching { DriveBackupWorker.schedule(it.applicationContext, WORKER_BACKUP_DELAY_MS) }
+        }
         debounceJob?.cancel()
         debounceJob = viewModelScope.launch {
             if (debounceMs > 0) {
