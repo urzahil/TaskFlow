@@ -1,23 +1,23 @@
 package rocks.urzahil.taskflow.ui.model
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.CalendarMonth
+import rocks.urzahil.taskflow.ui.icons.Bookmark
+import rocks.urzahil.taskflow.ui.icons.CalendarMonth
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.Flight
+import rocks.urzahil.taskflow.ui.icons.FitnessCenter
+import rocks.urzahil.taskflow.ui.icons.Flag
+import rocks.urzahil.taskflow.ui.icons.Flight
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.MedicalServices
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Palette
+import rocks.urzahil.taskflow.ui.icons.Lightbulb
+import rocks.urzahil.taskflow.ui.icons.MedicalServices
+import rocks.urzahil.taskflow.ui.icons.MusicNote
+import rocks.urzahil.taskflow.ui.icons.Palette
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Pets
-import androidx.compose.material.icons.filled.School
+import rocks.urzahil.taskflow.ui.icons.Pets
+import rocks.urzahil.taskflow.ui.icons.School
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Work
+import rocks.urzahil.taskflow.ui.icons.Work
 import androidx.compose.ui.graphics.vector.ImageVector
 
 object CategoryIcons {
