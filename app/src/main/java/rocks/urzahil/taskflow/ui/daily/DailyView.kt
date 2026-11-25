@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.AlertDialog
+import rocks.urzahil.taskflow.ui.components.ConfirmDeleteTaskDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -539,6 +540,7 @@ fun TaskCardItem(
     val task = taskItem.task
     var menuExpanded by remember { mutableStateOf(false) }
     var showDeleteOccurrenceDialog by remember { mutableStateOf(false) }
+    var showDeleteTaskDialog by remember { mutableStateOf(false) }
     var showAddSubtaskDialog by remember { mutableStateOf(false) }
     var newSubtaskTitle by remember { mutableStateOf("") }
 
@@ -949,7 +951,7 @@ fun TaskCardItem(
                         },
                         onClick = {
                             menuExpanded = false
-                            onDelete()
+                            showDeleteTaskDialog = true
                         }
                     )
                 }
@@ -1009,6 +1011,17 @@ fun TaskCardItem(
                         newSubtaskTitle = ""
                     }) { Text("Cancel") }
                 }
+            )
+        }
+
+        if (showDeleteTaskDialog) {
+            ConfirmDeleteTaskDialog(
+                task = task,
+                onConfirm = {
+                    showDeleteTaskDialog = false
+                    onDelete()
+                },
+                onDismiss = { showDeleteTaskDialog = false }
             )
         }
 

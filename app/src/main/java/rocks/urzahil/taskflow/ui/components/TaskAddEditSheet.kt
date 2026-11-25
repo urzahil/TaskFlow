@@ -303,8 +303,20 @@ fun TaskAddEditSheet(
         )
     }
 
+    var showDeleteConfirm by rememberSaveable(formKey) { mutableStateOf(false) }
     var showStartDatePicker by rememberSaveable(formKey) { mutableStateOf(false) }
     var showEndDatePicker by rememberSaveable(formKey) { mutableStateOf(false) }
+
+    if (showDeleteConfirm && existingTask != null && onDelete != null) {
+        ConfirmDeleteTaskDialog(
+            task = existingTask,
+            onConfirm = {
+                showDeleteConfirm = false
+                onDelete(existingTask)
+            },
+            onDismiss = { showDeleteConfirm = false }
+        )
+    }
 
     // Backups reject tasks that end before they start, so never let one be saved.
     val endsBeforeStart = isRecurring && hasEndDate && endDate < startDate
@@ -965,7 +977,7 @@ fun TaskAddEditSheet(
             ) {
                 if (existingTask != null && onDelete != null) {
                     OutlinedButton(
-                        onClick = { onDelete(existingTask) },
+                        onClick = { showDeleteConfirm = true },
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.error
                         ),
