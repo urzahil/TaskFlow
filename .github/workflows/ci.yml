@@ -18,6 +18,10 @@ jobs:
   check:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      # Maven Central rate-limits the shared runners (HTTP 429); resolve through Google's mirror
+      # first (see settings.gradle.kts). Gradle falls back to Maven Central when it lacks an artifact.
+      MAVEN_CENTRAL_MIRROR: https://maven-central.storage-download.googleapis.com/maven2
 
     steps:
       - name: Checkout
@@ -31,6 +35,9 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          # A failed build only touches part of the dependencies; do not purge the rest from the cache.
+          cache-cleanup: on-success
 
       # Robolectric downloads android-all jars into ~/.m2 at test time; keep them between runs
       # so a throttled Maven Central does not fail every test class.
