@@ -11,6 +11,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -604,40 +607,50 @@ fun TaskCardItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 9.dp),
+                .padding(start = 0.dp, end = 12.dp, top = 9.dp, bottom = 9.dp),
             verticalAlignment = Alignment.Top
         ) {
-            // Custom Animated Checkbox
+            // Custom checkbox: a 48dp touch target around the 24dp circle, exposed as a Checkbox.
             Box(
                 modifier = Modifier
-                    .padding(top = 1.dp)
-                    .size(24.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
-                    .background(
-                        if (taskItem.isCompleted) MaterialTheme.colorScheme.primary else Color.Transparent
-                    )
-                    .clickable { onToggle() }
-                    .padding(2.dp),
+                    .toggleable(
+                        value = taskItem.isCompleted,
+                        role = Role.Checkbox,
+                        onValueChange = { onToggle() }
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                if (taskItem.isCompleted) {
-                    Icon(
-                        Icons.Default.Check,
-                        contentDescription = "Completed",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                } else {
-                    Icon(
-                        Icons.Default.RadioButtonUnchecked,
-                        contentDescription = "Mark Complete",
-                        tint = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(22.dp)
-                    )
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (taskItem.isCompleted) MaterialTheme.colorScheme.primary else Color.Transparent
+                        )
+                        .padding(2.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (taskItem.isCompleted) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = "Completed",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.RadioButtonUnchecked,
+                            contentDescription = "Mark Complete",
+                            tint = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(2.dp))
 
             // Task Content
             Column(
@@ -682,52 +695,62 @@ fun TaskCardItem(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 4.dp),
+                                    .heightIn(min = 48.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(18.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (subtask.isChecked) MaterialTheme.colorScheme.primary else Color.Transparent
-                                        )
-                                        .clickable { onToggleSubtask(subtask) },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (subtask.isChecked) {
-                                        Icon(
-                                            Icons.Default.Check,
-                                            contentDescription = "Completed",
-                                            tint = MaterialTheme.colorScheme.onPrimary,
-                                            modifier = Modifier.size(12.dp)
-                                        )
-                                    } else {
-                                        Icon(
-                                            Icons.Default.RadioButtonUnchecked,
-                                            contentDescription = "Mark Complete",
-                                            tint = MaterialTheme.colorScheme.outline,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = subtask.title,
-                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp),
-                                    textDecoration = if (subtask.isChecked) TextDecoration.LineThrough else TextDecoration.None,
-                                    color = if (subtask.isChecked) {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    },
+                                // Checkbox and title toggle together; the remove button stays separate.
+                                Row(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .clickable { onToggleSubtask(subtask) }
-                                )
+                                        .heightIn(min = 48.dp)
+                                        .toggleable(
+                                            value = subtask.isChecked,
+                                            role = Role.Checkbox,
+                                            onValueChange = { onToggleSubtask(subtask) }
+                                        ),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(18.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (subtask.isChecked) MaterialTheme.colorScheme.primary else Color.Transparent
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (subtask.isChecked) {
+                                            Icon(
+                                                Icons.Default.Check,
+                                                contentDescription = "Completed",
+                                                tint = MaterialTheme.colorScheme.onPrimary,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                        } else {
+                                            Icon(
+                                                Icons.Default.RadioButtonUnchecked,
+                                                contentDescription = "Mark Complete",
+                                                tint = MaterialTheme.colorScheme.outline,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = subtask.title,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp),
+                                        textDecoration = if (subtask.isChecked) TextDecoration.LineThrough else TextDecoration.None,
+                                        color = if (subtask.isChecked) {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                                 IconButton(
                                     onClick = { onRemoveSubtask(subtask) },
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(48.dp)
                                 ) {
                                     Icon(
                                         Icons.Default.Close,
@@ -868,7 +891,7 @@ fun TaskCardItem(
                         IconButton(
                             onClick = toggleSubtasksCollapsed,
                             modifier = Modifier
-                                .size(24.dp)
+                                .size(48.dp)
                                 .testTag("subtask_toggle_${task.id}")
                         ) {
                             Icon(
@@ -888,7 +911,7 @@ fun TaskCardItem(
             Box {
                 IconButton(
                     onClick = { menuExpanded = true },
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         Icons.Default.MoreVert,
