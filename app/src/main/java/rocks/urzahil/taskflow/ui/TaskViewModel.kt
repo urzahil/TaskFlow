@@ -1,14 +1,11 @@
 package rocks.urzahil.taskflow.ui
 
-import android.app.Activity
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import rocks.urzahil.taskflow.data.drive.DriveConnectStep
-import rocks.urzahil.taskflow.data.drive.DriveBackupWorker
 import rocks.urzahil.taskflow.data.drive.GoogleDriveBackupManager
 import rocks.urzahil.taskflow.data.prefs.UserPreferencesRepository
 import rocks.urzahil.taskflow.data.db.CategoryNameConflictException
@@ -31,9 +28,6 @@ import rocks.urzahil.taskflow.ui.model.TaskFilter
 import rocks.urzahil.taskflow.ui.model.TaskItemUi
 import rocks.urzahil.taskflow.ui.monthly.monthGridDates
 import rocks.urzahil.taskflow.ui.model.ViewMode
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -42,7 +36,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -51,20 +44,6 @@ import kotlinx.coroutines.sync.withLock
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.CancellationException
-
-data class DriveSyncState(
-    val isSignedIn: Boolean = false,
-    val userEmail: String? = null,
-    val isSyncing: Boolean = false,
-    val lastBackupTimeFormatted: String? = null,
-    val lastBackupCount: Int = 0,
-    val lastBackupCategoriesCount: Int = 0,
-    val autoBackupEnabled: Boolean = true,
-    val syncConflict: Boolean = false,
-    val syncMessage: String? = null,
-    val isError: Boolean = false
-)
 
 data class DailyStats(
     val total: Int = 0,
@@ -81,8 +60,7 @@ class TaskViewModel(
 ) : ViewModel() {
 
     companion object {
-        const val DEFAULT_AUTO_BACKUP_DEBOUNCE_MS = 800L
-        private const val WORKER_BACKUP_DELAY_MS = 60_000L
+        const val DEFAULT_AUTO_BACKUP_DEBOUNCE_MS = DriveSyncCoordinator.DEFAULT_AUTO_BACKUP_DEBOUNCE_MS
 
         // Views that show tasks with collapsible subtasks; each keeps its own collapse state.
         val SUBTASK_COLLAPSE_VIEWS = UserPreferencesRepository.SUBTASK_COLLAPSE_VIEWS
@@ -167,13 +145,15 @@ class TaskViewModel(
     private fun clearSubtaskCollapseOverride(taskId: Long) =
         preferences.clearSubtaskCollapseOverride(taskId)
 
-    private val driveBackupMutex = Mutex()
     private val rolloverMutex = Mutex()
-    private val autoBackupChannel = Channel<Unit>(Channel.CONFLATED)
-    private var debounceJob: Job? = null
 
-    @Volatile
-    private var isAutoBackupPending = false
+    private val drive = DriveSyncCoordinator(
+        repository = repository,
+        backupManager = driveBackupManager,
+        scope = viewModelScope,
+        context = context,
+        onLocalDataReplaced = { onLocalDataReplaced() }
+    )
 
     private val _selectedDate = MutableStateFlow(_currentToday.value)
     val selectedDate: StateFlow<AppDate> = _selectedDate.asStateFlow()
@@ -218,22 +198,9 @@ class TaskViewModel(
         _maintenanceMessage.value = null
     }
 
-    private val _driveSyncState = MutableStateFlow(
-        DriveSyncState(
-            isSignedIn = driveBackupManager.isDriveConnected(),
-            userEmail = driveBackupManager.getConnectedAccountEmail(),
-            lastBackupTimeFormatted = driveBackupManager.getLastBackupTimeFormatted(),
-            lastBackupCount = driveBackupManager.getLastBackupCount(),
-            lastBackupCategoriesCount = driveBackupManager.getLastBackupCategoriesCount(),
-            autoBackupEnabled = driveBackupManager.isAutoBackupEnabled(),
-            syncConflict = driveBackupManager.isSyncConflictPending(),
-        )
-    )
-    val driveSyncState: StateFlow<DriveSyncState> = _driveSyncState.asStateFlow()
+    val driveSyncState: StateFlow<DriveSyncState> = drive.state
 
-    fun dismissSyncMessage() {
-        _driveSyncState.value = _driveSyncState.value.copy(syncMessage = null)
-    }
+    fun dismissSyncMessage() = drive.dismissSyncMessage()
 
     val categories: StateFlow<List<CategoryEntity>> = repository.allCategories
         .stateIn(
@@ -264,28 +231,15 @@ class TaskViewModel(
             }
             // On failure (e.g. Drive unreachable) nothing is seeded: starter tasks would count as
             // local data and the Drive backup lookup would never be retried.
-            refreshDriveState()
+            drive.refreshState()
 
             // Resume any backup that was durably marked pending before the process was killed or the last attempt failed.
-            if (driveBackupManager.isBackupPendingDurable() &&
-                driveBackupManager.isAutoBackupEnabled() &&
-                driveBackupManager.isDriveConnected()
-            ) {
-                isAutoBackupPending = true
-                autoBackupChannel.trySend(Unit)
-            }
+            drive.resumePendingBackup()
 
             // Run startup check unconditionally to clean old completed tasks and roll forward tasks to today
             val today = AppDate.today()
             _currentToday.value = today
             runCleanupAndRollover(targetDate = today, isForegroundCheck = true)
-        }
-
-        // Serialized auto-backup worker loop
-        viewModelScope.launch {
-            for (event in autoBackupChannel) {
-                executeAutoBackupLoop()
-            }
         }
     }
 
@@ -305,13 +259,7 @@ class TaskViewModel(
         }
 
         // Retry any durable backup that is still pending when the app returns to the foreground.
-        if (driveBackupManager.isBackupPendingDurable() &&
-            driveBackupManager.isAutoBackupEnabled() &&
-            driveBackupManager.isDriveConnected()
-        ) {
-            isAutoBackupPending = true
-            autoBackupChannel.trySend(Unit)
-        }
+        drive.resumePendingBackup()
 
         // Always execute cleanup and rollover on foreground transition and date changes
         runCleanupAndRollover(targetDate = now, isForegroundCheck = true)
@@ -820,222 +768,34 @@ class TaskViewModel(
         }
     }
 
-    fun triggerAutoBackup(debounceMs: Long = DEFAULT_AUTO_BACKUP_DEBOUNCE_MS) {
-        if (!driveBackupManager.isAutoBackupEnabled()) return
-        if (!driveBackupManager.isDriveConnected()) return
+    fun triggerAutoBackup(debounceMs: Long = DEFAULT_AUTO_BACKUP_DEBOUNCE_MS) =
+        drive.triggerAutoBackup(debounceMs)
 
-        // Stay quiet (but remember the change) until the user resolves a Drive/local conflict.
-        if (driveBackupManager.isSyncConflictPending()) {
-            driveBackupManager.setBackupPendingDurable(true)
-            return
-        }
+    suspend fun flushAutoBackup() = drive.flushAutoBackup()
 
-        isAutoBackupPending = true
-        driveBackupManager.setBackupPendingDurable(true)
-        // Safety net if the app is closed before the in-process upload runs: WorkManager uploads
-        // once online. When the in-process upload succeeds first, the pending flag is clear and
-        // the worker does nothing.
-        context?.let {
-            // Best effort: a scheduling problem must never break editing.
-            runCatching { DriveBackupWorker.schedule(it.applicationContext, WORKER_BACKUP_DELAY_MS) }
-        }
-        debounceJob?.cancel()
-        debounceJob = viewModelScope.launch {
-            if (debounceMs > 0) {
-                delay(debounceMs)
-            }
-            autoBackupChannel.send(Unit)
-        }
-    }
+    fun refreshDriveState(message: String? = null, isError: Boolean = false) =
+        drive.refreshState(message, isError)
 
-    suspend fun flushAutoBackup() {
-        debounceJob?.cancel()
-        if (isAutoBackupPending) {
-            autoBackupChannel.send(Unit)
-        }
-        driveBackupMutex.withLock { /* Wait for in-flight backup to complete */ }
-    }
+    fun backupToDrive() = drive.backupToDrive()
 
-    private suspend fun executeAutoBackupLoop() {
-        driveBackupMutex.withLock {
-            while (isAutoBackupPending) {
-                isAutoBackupPending = false
-                if (driveBackupManager.isSyncConflictPending()) break
-                if (!driveBackupManager.isAutoBackupEnabled() || !driveBackupManager.isDriveConnected()) {
-                    if (!driveBackupManager.isAutoBackupEnabled()) {
-                        driveBackupManager.setBackupPendingDurable(false)
-                    }
-                    break
-                }
-                try {
-                    val snapshot = repository.getBackupSnapshot()
-                    val result = driveBackupManager.backupSnapshot(snapshot)
-                    if (result.isSuccess) {
-                        driveBackupManager.setBackupPendingDurable(false)
-                        refreshDriveState()
-                    } else {
-                        isAutoBackupPending = true
-                        driveBackupManager.setBackupPendingDurable(true)
-                        val err = result.exceptionOrNull()?.message ?: "Auto-backup failed"
-                        refreshDriveState(message = "Auto-backup error: $err", isError = true)
-                        break
-                    }
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
-                    refreshDriveState(message = "Auto-backup failed: ${e.message}", isError = true)
-                }
-            }
-        }
-    }
+    fun restoreFromDrive() = drive.restoreFromDrive()
 
-    fun refreshDriveState(message: String? = null, isError: Boolean = false) {
-        val accountEmail = driveBackupManager.getConnectedAccountEmail()
-        _driveSyncState.value = DriveSyncState(
-            isSignedIn = accountEmail != null,
-            userEmail = accountEmail,
-            isSyncing = false,
-            lastBackupTimeFormatted = driveBackupManager.getLastBackupTimeFormatted(),
-            lastBackupCount = driveBackupManager.getLastBackupCount(),
-            lastBackupCategoriesCount = driveBackupManager.getLastBackupCategoriesCount(),
-            autoBackupEnabled = driveBackupManager.isAutoBackupEnabled(),
-            syncConflict = driveBackupManager.isSyncConflictPending(),
-            syncMessage = message,
-            isError = isError
-        )
-    }
-
-    fun backupToDrive() {
-        viewModelScope.launch {
-            _driveSyncState.value = _driveSyncState.value.copy(isSyncing = true, syncMessage = null)
-            try {
-                driveBackupMutex.withLock {
-                    val snapshot = repository.getBackupSnapshot()
-                    val result = driveBackupManager.backupSnapshot(snapshot)
-                    if (result.isSuccess) {
-                        refreshDriveState(
-                            message = "Backed up ${snapshot.tasks.size} tasks & ${snapshot.categories.size} categories to Google Drive! ☁️",
-                            isError = false
-                        )
-                    } else {
-                        val err = result.exceptionOrNull()?.message ?: "Backup failed"
-                        refreshDriveState(message = "Backup error: $err", isError = true)
-                    }
-                }
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                refreshDriveState(message = "Backup failed: ${e.message}", isError = true)
-            }
-        }
-    }
-
-    fun restoreFromDrive() {
-        viewModelScope.launch {
-            _driveSyncState.value = _driveSyncState.value.copy(isSyncing = true, syncMessage = null)
-            try {
-                val result = driveBackupMutex.withLock {
-                    driveBackupManager.restoreFromDrive()
-                }
-                if (result.isSuccess) {
-                    val res = result.getOrThrow()
-                    onLocalDataReplaced()
-                    refreshDriveState(
-                        message = "Restored ${res.taskCount} tasks & ${res.categoryCount} categories from Google Drive! 🎉",
-                        isError = false
-                    )
-                } else {
-                    val err = result.exceptionOrNull()?.message ?: "Restore failed"
-                    refreshDriveState(message = "Restore error: $err", isError = true)
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                refreshDriveState(message = "Restore failed: ${e.message}", isError = true)
-            }
-        }
-    }
-
-    fun setAutoBackupEnabled(enabled: Boolean) {
-        driveBackupManager.setAutoBackupEnabled(enabled)
-        refreshDriveState()
-    }
+    fun setAutoBackupEnabled(enabled: Boolean) = drive.setAutoBackupEnabled(enabled)
 
     /** Consent screens for Drive access, for the UI to launch; results go to [onDriveConsentResult]. */
-    private val _driveConsentRequests = Channel<PendingIntent>(Channel.CONFLATED)
-    val driveConsentRequests: Flow<PendingIntent> = _driveConsentRequests.receiveAsFlow()
+    val driveConsentRequests: Flow<PendingIntent> = drive.consentRequests
 
     /** Connects Google Drive, asking the UI to show Google's consent screen when needed. */
-    fun connectGoogleDrive() {
-        viewModelScope.launch {
-            _driveSyncState.value = _driveSyncState.value.copy(isSyncing = true, syncMessage = null)
-            try {
-                when (val step = driveBackupManager.connect()) {
-                    is DriveConnectStep.Connected -> onDriveConnected(step.accountEmail)
-                    is DriveConnectStep.NeedsUserConsent -> {
-                        refreshDriveState()
-                        _driveConsentRequests.send(step.pendingIntent)
-                    }
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                onDriveConnectFailed(e)
-            }
-        }
-    }
+    fun connectGoogleDrive() = drive.connect()
 
     /** Handles the result of the consent screen requested through [driveConsentRequests]. */
-    fun onDriveConsentResult(resultCode: Int, data: Intent?) {
-        if (resultCode != Activity.RESULT_OK) {
-            refreshDriveState("Google Drive was not connected", isError = true)
-            return
-        }
-        viewModelScope.launch {
-            try {
-                onDriveConnected(driveBackupManager.completeConnect(data))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                onDriveConnectFailed(e)
-            }
-        }
-    }
-
-    private fun onDriveConnectFailed(e: Exception) {
-        refreshDriveState("Could not connect Google Drive: ${e.message}", isError = true)
-    }
-
-    private fun onDriveConnected(accountEmail: String) {
-        refreshDriveState(message = "Connected to Google Drive as $accountEmail")
-        // Check if fresh tasks can be auto-restored
-        viewModelScope.launch {
-            val currentTasks = repository.allTasks.first()
-            if (currentTasks.isEmpty()) {
-                val result = driveBackupMutex.withLock {
-                    driveBackupManager.restoreFromDrive()
-                }
-                val res = result.getOrNull()
-                if (res != null && (res.taskCount > 0 || res.categoryCount > 0)) {
-                    onLocalDataReplaced()
-                    refreshDriveState(
-                        message = "Connected as $accountEmail and restored ${res.taskCount} tasks & ${res.categoryCount} categories from Drive! 🎉",
-                        isError = false
-                    )
-                }
-            } else if (driveBackupManager.detectSyncConflict()) {
-                // Both this device and Drive hold data: ask before anything is overwritten.
-                refreshDriveState(
-                    message = "Connected as $accountEmail. Drive already has a backup, so automatic backup is paused until you choose which data to keep.",
-                    isError = false
-                )
-            }
-        }
-    }
+    fun onDriveConsentResult(resultCode: Int, data: Intent?) = drive.onConsentResult(resultCode, data)
 
     /** Resolve a sync conflict by replacing this device's data with the Drive backup. */
-    fun resolveSyncConflictKeepDrive() = restoreFromDrive()
+    fun resolveSyncConflictKeepDrive() = drive.resolveSyncConflictKeepDrive()
 
     /** Resolve a sync conflict by replacing the Drive backup with this device's data. */
-    fun resolveSyncConflictUseThisDevice() = backupToDrive()
+    fun resolveSyncConflictUseThisDevice() = drive.resolveSyncConflictUseThisDevice()
 
     /**
      * After the whole local data set was swapped by a restore, lift the once-per-day automatic
@@ -1046,42 +806,11 @@ class TaskViewModel(
         runCleanupAndRollover(targetDate = AppDate.today(), isForegroundCheck = true)
     }
 
-    fun disconnectGoogleDrive() {
-        viewModelScope.launch {
-            driveBackupManager.disconnect()
-            refreshDriveState(message = "Disconnected from Google Drive")
-        }
-    }
+    fun disconnectGoogleDrive() = drive.disconnect()
 
-    suspend fun getBackupJsonString(): String {
-        return driveBackupManager.exportBackupJson(repository.getBackupSnapshot())
-    }
+    suspend fun getBackupJsonString(): String = drive.getBackupJsonString()
 
-    fun restoreFromJson(jsonString: String) {
-        viewModelScope.launch {
-            _driveSyncState.value = _driveSyncState.value.copy(isSyncing = true, syncMessage = null)
-            try {
-                val result = driveBackupMutex.withLock {
-                    driveBackupManager.restoreFromJson(jsonString)
-                }
-                if (result.isSuccess) {
-                    val res = result.getOrThrow()
-                    onLocalDataReplaced()
-                    refreshDriveState(
-                        message = "Restored ${res.taskCount} tasks & ${res.categoryCount} categories from backup file! 🎉",
-                        isError = false
-                    )
-                } else {
-                    val err = result.exceptionOrNull()?.message ?: "Invalid backup file"
-                    refreshDriveState(message = "Restore error: $err", isError = true)
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                refreshDriveState(message = "Restore failed: ${e.message}", isError = true)
-            }
-        }
-    }
+    fun restoreFromJson(jsonString: String) = drive.restoreFromJson(jsonString)
 
     class Factory(
         private val repository: TaskRepository,
