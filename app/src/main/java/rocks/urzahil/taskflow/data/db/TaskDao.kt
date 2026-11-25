@@ -349,6 +349,20 @@ interface TaskDao {
     )
     suspend fun moveSubtaskExclusionsTo(taskId: Long, newDate: String)
 
+    /** Past subtask checks are unreachable once a recurring task's start date has moved on. */
+    @Query("DELETE FROM subtask_completions WHERE date < :todayIso")
+    suspend fun deleteSubtaskCompletionsBefore(todayIso: String)
+
+    @Query("DELETE FROM subtask_exclusions WHERE date < :todayIso")
+    suspend fun deleteSubtaskExclusionsBefore(todayIso: String)
+
+    /** Per-occurrence subtasks of recurring tasks for days that are over (cascades their checks). */
+    @Query(
+        "DELETE FROM subtasks WHERE date IS NOT NULL AND date < :todayIso AND " +
+            "taskId IN (SELECT id FROM tasks WHERE isRecurring = 1)"
+    )
+    suspend fun deletePastOccurrenceSubtasksBefore(todayIso: String)
+
     @Transaction
     suspend fun performCleanupAndRolloverBatch(
         tasksToDelete: List<TaskEntity>,
@@ -378,6 +392,11 @@ interface TaskDao {
         }
         deleteCompletionsBefore(todayIso)
         deleteOccurrenceExclusionsBefore(todayIso)
+        // One-off tasks' subtask checks were moved to today above, so what is left in the past
+        // belongs to recurring tasks and can no longer be reached.
+        deleteSubtaskCompletionsBefore(todayIso)
+        deleteSubtaskExclusionsBefore(todayIso)
+        deletePastOccurrenceSubtasksBefore(todayIso)
     }
 
     /** Completions and occurrence exclusions go with the tasks (ON DELETE CASCADE). */
