@@ -74,34 +74,8 @@ fun MonthlyView(
     val (year, month) = yearMonth
     val today = currentToday
 
-    // Calculate calendar grid days: starting from Monday before 1st of month
-    val calendarDays = remember(year, month) {
-        val firstDay = AppDate(year, month, 1)
-        val firstDow = firstDay.dayOfWeek() // 1 = Mon, 7 = Sun
-        val leadingDaysCount = firstDow - 1
-
-        val days = mutableListOf<AppDate>()
-        // Add leading days from previous month
-        for (i in leadingDaysCount downTo 1) {
-            days.add(firstDay.minusDays(i.toLong()))
-        }
-
-        // Add days of current month
-        val daysInMonth = AppDate.daysInMonth(year, month)
-        for (d in 1..daysInMonth) {
-            days.add(AppDate(year, month, d))
-        }
-
-        // Add trailing days to complete full 7-day rows (up to 35 or 42 cells)
-        val totalCells = if (days.size <= 35) 35 else 42
-        var trailing = 1
-        while (days.size < totalCells) {
-            val lastDay = AppDate(year, month, daysInMonth)
-            days.add(lastDay.plusDays(trailing.toLong()))
-            trailing++
-        }
-        days
-    }
+    // Calendar grid days: starting from the Monday before the 1st of the month
+    val calendarDays = remember(year, month) { monthGridDates(year, month) }
 
     LazyColumn(
         modifier = modifier

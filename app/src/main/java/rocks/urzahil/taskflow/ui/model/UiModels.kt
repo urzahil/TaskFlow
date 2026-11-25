@@ -8,7 +8,14 @@ data class TaskItemUi(
     val date: AppDate,
     val isCompleted: Boolean,
     val subtasks: List<SubtaskItemUi> = emptyList()
-)
+) {
+    /** Whether [query] appears in the task's title, notes, category or any of its subtasks. */
+    fun matches(query: String): Boolean =
+        task.title.contains(query, ignoreCase = true) ||
+            task.description.contains(query, ignoreCase = true) ||
+            task.category.contains(query, ignoreCase = true) ||
+            subtasks.any { it.title.contains(query, ignoreCase = true) }
+}
 
 data class SubtaskItemUi(
     val id: Long,

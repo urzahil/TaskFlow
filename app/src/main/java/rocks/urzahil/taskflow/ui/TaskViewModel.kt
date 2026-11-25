@@ -27,6 +27,7 @@ import rocks.urzahil.taskflow.ui.model.DayTasksGroupUi
 import rocks.urzahil.taskflow.ui.model.SubtaskItemUi
 import rocks.urzahil.taskflow.ui.model.TaskFilter
 import rocks.urzahil.taskflow.ui.model.TaskItemUi
+import rocks.urzahil.taskflow.ui.monthly.monthGridDates
 import rocks.urzahil.taskflow.ui.model.ViewMode
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -638,9 +639,22 @@ class TaskViewModel(
         }
 
         /** Per-day summaries for [dates], leaving out days with nothing scheduled. */
-        fun summarize(dates: List<AppDate>): Map<String, DaySummaryUi> {
+        fun summarize(dates: List<AppDate>, query: String = ""): Map<String, DaySummaryUi> {
             val summaryMap = mutableMapOf<String, DaySummaryUi>()
             for (date in dates) {
+                if (query.isNotBlank()) {
+                    // Only the tasks matching the search count towards the day's indicator.
+                    val matching = tasksOn(date).filter { it.matches(query) }
+                    if (matching.isNotEmpty()) {
+                        summaryMap[date.toIsoString()] = DaySummaryUi(
+                            date = date,
+                            totalTasks = matching.size,
+                            completedTasks = matching.count { it.isCompleted },
+                            taskColors = matching.take(3).map { it.task.colorHex }
+                        )
+                    }
+                    continue
+                }
                 val dateIso = date.toIsoString()
                 val scheduledSchedules = scheduledOn(date, dateIso)
                 if (scheduledSchedules.isEmpty()) continue
@@ -675,11 +689,6 @@ class TaskViewModel(
         )
     }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(5000), replay = 1)
 
-    private fun TaskItemUi.matches(query: String): Boolean =
-        task.title.contains(query, ignoreCase = true) ||
-                task.description.contains(query, ignoreCase = true) ||
-                task.category.contains(query, ignoreCase = true)
-
     /**
      * Tasks for the currently selected date.
      */
@@ -706,11 +715,23 @@ class TaskViewModel(
      * In the selected day overview of the monthly view, always show all scheduled tasks
      * for the selected date regardless of the completion filter (All, pending, done) on the daily page.
      */
-    val monthlySelectedDayTasks: StateFlow<List<TaskItemUi>> = combine(
+    private val selectedDayTasksUnfiltered: StateFlow<List<TaskItemUi>> = combine(
         snapshot,
         _selectedDate
     ) { snap, date ->
         snap.tasksOn(date)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    /** The monthly view's selected-day list; narrowed by the search query like the other views. */
+    val monthlySelectedDayTasks: StateFlow<List<TaskItemUi>> = combine(
+        selectedDayTasksUnfiltered,
+        _searchQuery
+    ) { items, query ->
+        if (query.isBlank()) items else items.filter { it.matches(query) }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -744,7 +765,7 @@ class TaskViewModel(
      * Statistics for the currently selected date (total, completed). Derived from the unfiltered
      * day list, so individually deleted recurring occurrences do not count.
      */
-    val dailyStats: StateFlow<DailyStats> = monthlySelectedDayTasks
+    val dailyStats: StateFlow<DailyStats> = selectedDayTasksUnfiltered
         .map { items -> DailyStats(total = items.size, completed = items.count { it.isCompleted }) }
         .stateIn(
             scope = viewModelScope,
@@ -753,13 +774,15 @@ class TaskViewModel(
         )
 
     /**
-     * Map of Date ISO string to DaySummaryUi for all days in the currently selected month.
+     * Map of Date ISO string to DaySummaryUi for every day shown in the selected month's grid.
      */
     val monthDaysSummary: StateFlow<Map<String, DaySummaryUi>> = combine(
         snapshot,
-        _selectedYearMonth
-    ) { snap, (year, month) ->
-        snap.summarize((1..AppDate.daysInMonth(year, month)).map { AppDate(year, month, it) })
+        _selectedYearMonth,
+        _searchQuery
+    ) { snap, (year, month), query ->
+        // The whole grid, so the leading/trailing days of adjacent months show their tasks too.
+        snap.summarize(monthGridDates(year, month), query)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
