@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import rocks.urzahil.taskflow.data.drive.DriveConnectStep
+import rocks.urzahil.taskflow.data.drive.DriveBackupWorker
 import rocks.urzahil.taskflow.data.drive.GoogleDriveBackupManager
 import rocks.urzahil.taskflow.data.db.CategoryNameConflictException
 import rocks.urzahil.taskflow.data.db.LastDefaultCategoryException
@@ -79,6 +80,7 @@ class TaskViewModel(
 
     companion object {
         const val DEFAULT_AUTO_BACKUP_DEBOUNCE_MS = 800L
+        private const val WORKER_BACKUP_DELAY_MS = 60_000L
         private const val PREFS_NAME = "taskflow_user_prefs"
         private const val KEY_SHOW_DAILY_PROGRESS = "show_daily_progress"
         private const val KEY_IS_DARK_MODE = "is_dark_mode"
@@ -454,12 +456,14 @@ class TaskViewModel(
             if (restored != null && (restored.taskCount > 0 || restored.categoryCount > 0)) {
                 _maintenanceMessage.value =
                     "Restored ${restored.taskCount} tasks & ${restored.categoryCount} categories from Google Drive backup 🎉"
-            } else {
+            } else if (restoredResult.isSuccess) {
                 val currentTasks = repository.allTasks.first()
                 if (currentTasks.isEmpty()) {
                     repository.seedInitialTasksIfEmpty()
                 }
             }
+            // On failure (e.g. Drive unreachable) nothing is seeded: starter tasks would count as
+            // local data and the Drive backup lookup would never be retried.
             refreshDriveState()
 
             // Resume any backup that was durably marked pending before the process was killed or the last attempt failed.
@@ -563,6 +567,8 @@ class TaskViewModel(
                     }
                     _maintenanceMessage.value =
                         details.joinToString(", ").replaceFirstChar { it.uppercase() } + "."
+                    // Rollover rewrote or deleted tasks: back that up like any other change.
+                    triggerAutoBackup()
                 } else if (!isForegroundCheck) {
                     _maintenanceMessage.value =
                         "Tasks are up to date for today. No rollover needed."
@@ -1007,6 +1013,13 @@ class TaskViewModel(
 
         isAutoBackupPending = true
         driveBackupManager.setBackupPendingDurable(true)
+        // Safety net if the app is closed before the in-process upload runs: WorkManager uploads
+        // once online. When the in-process upload succeeds first, the pending flag is clear and
+        // the worker does nothing.
+        context?.let {
+            // Best effort: a scheduling problem must never break editing.
+            runCatching { DriveBackupWorker.schedule(it.applicationContext, WORKER_BACKUP_DELAY_MS) }
+        }
         debounceJob?.cancel()
         debounceJob = viewModelScope.launch {
             if (debounceMs > 0) {
@@ -1036,17 +1049,8 @@ class TaskViewModel(
                     break
                 }
                 try {
-                    val tasks = repository.allTasks.first()
-                    val completions = repository.allCompletions.first()
-                    val categories = repository.allCategories.first()
-                    val exclusions = repository.allOccurrenceExclusions.first()
-                    val subtasks = repository.allSubtasks.first()
-                    val subtaskCompletions = repository.allSubtaskCompletions.first()
-                    val subtaskExclusions = repository.allSubtaskExclusions.first()
-                    val result = driveBackupManager.backupToDrive(
-                        tasks, completions, categories, exclusions, subtasks, subtaskCompletions,
-                        subtaskExclusions
-                    )
+                    val snapshot = repository.getBackupSnapshot()
+                    val result = driveBackupManager.backupSnapshot(snapshot)
                     if (result.isSuccess) {
                         driveBackupManager.setBackupPendingDurable(false)
                         refreshDriveState()
@@ -1086,20 +1090,11 @@ class TaskViewModel(
             _driveSyncState.value = _driveSyncState.value.copy(isSyncing = true, syncMessage = null)
             try {
                 driveBackupMutex.withLock {
-                    val tasks = repository.allTasks.first()
-                    val completions = repository.allCompletions.first()
-                    val categories = repository.allCategories.first()
-                    val exclusions = repository.allOccurrenceExclusions.first()
-                    val subtasks = repository.allSubtasks.first()
-                    val subtaskCompletions = repository.allSubtaskCompletions.first()
-                    val subtaskExclusions = repository.allSubtaskExclusions.first()
-                    val result = driveBackupManager.backupToDrive(
-                        tasks, completions, categories, exclusions, subtasks, subtaskCompletions,
-                        subtaskExclusions
-                    )
+                    val snapshot = repository.getBackupSnapshot()
+                    val result = driveBackupManager.backupSnapshot(snapshot)
                     if (result.isSuccess) {
                         refreshDriveState(
-                            message = "Backed up ${tasks.size} tasks & ${categories.size} categories to Google Drive! ☁️",
+                            message = "Backed up ${snapshot.tasks.size} tasks & ${snapshot.categories.size} categories to Google Drive! ☁️",
                             isError = false
                         )
                     } else {
@@ -1241,17 +1236,7 @@ class TaskViewModel(
     }
 
     suspend fun getBackupJsonString(): String {
-        val tasks = repository.allTasks.first()
-        val completions = repository.allCompletions.first()
-        val categories = repository.allCategories.first()
-        val exclusions = repository.allOccurrenceExclusions.first()
-        val subtasks = repository.allSubtasks.first()
-        val subtaskCompletions = repository.allSubtaskCompletions.first()
-        val subtaskExclusions = repository.allSubtaskExclusions.first()
-        return driveBackupManager.exportBackupJson(
-            tasks, completions, categories, exclusions, subtasks, subtaskCompletions,
-            subtaskExclusions
-        )
+        return driveBackupManager.exportBackupJson(repository.getBackupSnapshot())
     }
 
     fun restoreFromJson(jsonString: String) {

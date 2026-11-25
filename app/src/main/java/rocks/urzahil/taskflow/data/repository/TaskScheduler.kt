@@ -16,8 +16,10 @@ object TaskScheduler {
         val pastTasks = taskDao.getPastNonRecurringTasks(todayIso)
             .filterNot { it.id in completedNonRecurringIds }
         val completionKeys = taskDao.getAllCompletionsList().mapTo(HashSet()) { key(it.taskId, it.date) }
-        val exclusionKeys =
-            taskDao.getAllOccurrenceExclusionsList().mapTo(HashSet()) { key(it.taskId, it.date) }
+        val exclusions = taskDao.getAllOccurrenceExclusionsList()
+        val exclusionKeys = exclusions.mapTo(HashSet()) { key(it.taskId, it.date) }
+        // ISO dates sort lexicographically, so a range check needs no parsing or per-day strings.
+        val exclusionDatesByTask = exclusions.groupBy({ it.taskId }, { it.date })
 
         var cleanedCount = 0
         var movedCount = 0
@@ -56,9 +58,12 @@ object TaskScheduler {
                         start.plusDays(it).dayOfWeek() in weekdays
                     }
                 }
-                val excludedPastOccurrences = (0L until span).count { offset ->
-                    key(task.id, start.plusDays(offset).toIsoString()) in exclusionKeys
-                }
+                // O(exclusions of this task), not O(days since start): an imported task with a very
+                // old start date would otherwise allocate a string for every day in between.
+                val startIso = start.toIsoString()
+                val lastPastIso = lastPastDate.toIsoString()
+                val excludedPastOccurrences = exclusionDatesByTask[task.id].orEmpty()
+                    .count { it in startIso..lastPastIso }
                 cleanedRecurringOccurrences =
                     (cleanedRecurringOccurrences.toLong() + (count - excludedPastOccurrences).coerceAtLeast(0))
                         .coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
@@ -108,7 +113,16 @@ object TaskScheduler {
                     movedCount++
                 }
 
-                tasksToUpdate.add(task.copy(startDate = nextOccurrence.toIsoString()))
+                // Weekday and every-month schedules don't depend on where they start, so only move
+                // the start to today. Jumping to the next occurrence would hide days from the
+                // schedule if the user then edits it (e.g. adds Wednesday on a Tuesday).
+                val phaseIndependent = if (schedule.isMonthly) {
+                    schedule.monthInterval == 1
+                } else {
+                    weekdays.isNotEmpty()
+                }
+                val newStart = if (phaseIndependent) today else nextOccurrence
+                tasksToUpdate.add(task.copy(startDate = newStart.toIsoString()))
             }
         }
 
