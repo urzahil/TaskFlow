@@ -516,6 +516,8 @@ fun MainScreen(
                         onRestoreFromDrive = {
                             viewModel.restoreFromDrive()
                         },
+                        onResolveSyncConflictKeepDrive = { viewModel.resolveSyncConflictKeepDrive() },
+                        onResolveSyncConflictKeepThisDevice = { viewModel.resolveSyncConflictUseThisDevice() },
                         onSetAutoBackup = { enabled ->
                             viewModel.setAutoBackupEnabled(enabled)
                         },
