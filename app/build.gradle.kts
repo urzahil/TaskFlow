@@ -62,7 +62,19 @@ android {
         compose = true
         buildConfig = true
     }
-    testOptions { unitTests { isIncludeAndroidResources = true } }
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all { test ->
+                // Robolectric downloads its android-all jars at test time; let CI point it at a
+                // mirror instead of the rate-limited Maven Central.
+                System.getenv("MAVEN_CENTRAL_MIRROR")?.takeIf { it.isNotBlank() }?.let {
+                    test.systemProperty("robolectric.dependency.repo.url", it)
+                    test.systemProperty("robolectric.dependency.repo.id", "ci-mirror")
+                }
+            }
+        }
+    }
     dependenciesInfo {
         includeInApk = false
         includeInBundle = true

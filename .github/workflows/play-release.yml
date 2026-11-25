@@ -36,6 +36,9 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          # A failed build only touches part of the dependencies; do not purge the rest from the cache.
+          cache-cleanup: on-success
 
       - name: Validate release secrets
         shell: bash
