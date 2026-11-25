@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import rocks.urzahil.taskflow.data.drive.DriveConnectStep
 import rocks.urzahil.taskflow.data.drive.GoogleDriveBackupManager
+import rocks.urzahil.taskflow.data.prefs.UserPreferencesRepository
 import rocks.urzahil.taskflow.data.db.CategoryNameConflictException
 import rocks.urzahil.taskflow.data.db.LastDefaultCategoryException
 import rocks.urzahil.taskflow.data.model.AppDate
@@ -79,291 +80,89 @@ class TaskViewModel(
 
     companion object {
         const val DEFAULT_AUTO_BACKUP_DEBOUNCE_MS = 800L
-        private const val PREFS_NAME = "taskflow_user_prefs"
-        private const val KEY_SHOW_DAILY_PROGRESS = "show_daily_progress"
-        private const val KEY_IS_DARK_MODE = "is_dark_mode"
-        private const val KEY_USE_DYNAMIC_COLORS = "use_dynamic_colors"
-        private const val KEY_SHOW_MONTHLY_TASK_LIST = "show_monthly_task_list"
-        private const val KEY_SHOW_MONTHLY_VIEW = "show_monthly_view"
-        private const val KEY_SHOW_LIST_VIEW = "show_list_view"
-        // Older builds stored inverted "hide_*" flags; they are read only when no "show_*" value exists.
-        private const val KEY_LEGACY_HIDE_MONTHLY_TASK_LIST = "hide_monthly_task_list"
-        private const val KEY_LEGACY_HIDE_MONTHLY_VIEW = "hide_monthly_view"
-        private const val KEY_LEGACY_HIDE_LIST_VIEW = "hide_list_view"
-        private const val KEY_ROLLOVER_CLEANUP_ENABLED = "rollover_cleanup_enabled"
-        private const val KEY_LAST_ROLLOVER_DATE = "last_rollover_date"
-        private const val KEY_LAST_ROLLOVER_TIMESTAMP = "last_rollover_timestamp"
-        private const val KEY_LAST_AUTOMATIC_ROLLOVER_DATE = "last_automatic_rollover_date"
-        private const val KEY_START_VIEW = "start_view_mode"
-        // Tasks toggled away from the default collapse state, one set per view; the view name is
-        // appended (e.g. "subtask_collapse_overrides_DAILY").
-        private const val KEY_SUBTASK_COLLAPSE_OVERRIDES_PREFIX = "subtask_collapse_overrides_"
-        // Older builds shared one set across all views; it is discarded on startup.
-        private const val KEY_LEGACY_COLLAPSED_SUBTASK_TASK_IDS = "collapsed_subtask_task_ids"
-        private const val KEY_SUBTASKS_COLLAPSED_BY_DEFAULT = "subtasks_collapsed_by_default"
-        private const val KEY_HIDE_COMPLETED_IN_LIST = "hide_completed_in_list"
-        private const val KEY_COLLAPSIBLE_DAYS_IN_LIST = "collapsible_days_in_list"
-        // ISO dates of the List view days the user collapsed.
-        private const val KEY_COLLAPSED_LIST_DAYS = "collapsed_list_days"
 
         // Views that show tasks with collapsible subtasks; each keeps its own collapse state.
-        val SUBTASK_COLLAPSE_VIEWS = listOf(ViewMode.DAILY, ViewMode.MONTHLY, ViewMode.LIST)
+        val SUBTASK_COLLAPSE_VIEWS = UserPreferencesRepository.SUBTASK_COLLAPSE_VIEWS
     }
 
-    private val userPrefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private var lastAutomaticRolloverDate: String? =
-        userPrefs?.getString(KEY_LAST_AUTOMATIC_ROLLOVER_DATE, null)
+    private val preferences = UserPreferencesRepository(context)
 
-    private val _isDarkMode = MutableStateFlow(
-        userPrefs?.getBoolean(KEY_IS_DARK_MODE, true) ?: true
-    )
-    val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
+    val isDarkMode: StateFlow<Boolean> = preferences.isDarkMode
+    fun setDarkMode(enabled: Boolean) = preferences.setDarkMode(enabled)
 
-    fun setDarkMode(enabled: Boolean) {
-        _isDarkMode.value = enabled
-        userPrefs?.edit()?.putBoolean(KEY_IS_DARK_MODE, enabled)?.apply()
-    }
+    val useDynamicColors: StateFlow<Boolean> = preferences.useDynamicColors
+    fun setUseDynamicColors(enabled: Boolean) = preferences.setUseDynamicColors(enabled)
 
-    private val _useDynamicColors = MutableStateFlow(
-        userPrefs?.getBoolean(KEY_USE_DYNAMIC_COLORS, false) ?: false
-    )
-    val useDynamicColors: StateFlow<Boolean> = _useDynamicColors.asStateFlow()
+    val showMonthlyTaskList: StateFlow<Boolean> = preferences.showMonthlyTaskList
+    fun setShowMonthlyTaskList(show: Boolean) = preferences.setShowMonthlyTaskList(show)
 
-    fun setUseDynamicColors(enabled: Boolean) {
-        _useDynamicColors.value = enabled
-        userPrefs?.edit()?.putBoolean(KEY_USE_DYNAMIC_COLORS, enabled)?.apply()
-    }
-
-    private fun readShowPreference(showKey: String, legacyHideKey: String): Boolean {
-        val prefs = userPrefs ?: return true
-        return when {
-            prefs.contains(showKey) -> prefs.getBoolean(showKey, true)
-            prefs.contains(legacyHideKey) -> !prefs.getBoolean(legacyHideKey, false)
-            else -> true
-        }
-    }
-
-    private val _showMonthlyTaskList = MutableStateFlow(
-        readShowPreference(KEY_SHOW_MONTHLY_TASK_LIST, KEY_LEGACY_HIDE_MONTHLY_TASK_LIST)
-    )
-    val showMonthlyTaskList: StateFlow<Boolean> = _showMonthlyTaskList.asStateFlow()
-
-    fun setShowMonthlyTaskList(show: Boolean) {
-        _showMonthlyTaskList.value = show
-        userPrefs?.edit()?.putBoolean(KEY_SHOW_MONTHLY_TASK_LIST, show)?.apply()
-    }
-
-    private val _showMonthlyView = MutableStateFlow(
-        readShowPreference(KEY_SHOW_MONTHLY_VIEW, KEY_LEGACY_HIDE_MONTHLY_VIEW)
-    )
-    val showMonthlyView: StateFlow<Boolean> = _showMonthlyView.asStateFlow()
+    val showMonthlyView: StateFlow<Boolean> = preferences.showMonthlyView
 
     fun setShowMonthlyView(show: Boolean) {
-        _showMonthlyView.value = show
-        userPrefs?.edit()?.putBoolean(KEY_SHOW_MONTHLY_VIEW, show)?.apply()
+        preferences.setShowMonthlyView(show)
         if (!show && _viewMode.value == ViewMode.MONTHLY) {
             _viewMode.value = ViewMode.DAILY
         }
     }
 
-    private val _showListView = MutableStateFlow(
-        readShowPreference(KEY_SHOW_LIST_VIEW, KEY_LEGACY_HIDE_LIST_VIEW)
-    )
-    val showListView: StateFlow<Boolean> = _showListView.asStateFlow()
+    val showListView: StateFlow<Boolean> = preferences.showListView
 
     fun setShowListView(show: Boolean) {
-        _showListView.value = show
-        userPrefs?.edit()?.putBoolean(KEY_SHOW_LIST_VIEW, show)?.apply()
+        preferences.setShowListView(show)
         if (!show && _viewMode.value == ViewMode.LIST) {
             _viewMode.value = ViewMode.DAILY
         }
     }
 
-    private val _rolloverCleanupEnabled = MutableStateFlow(
-        userPrefs?.getBoolean(KEY_ROLLOVER_CLEANUP_ENABLED, true) ?: true
-    )
-    val rolloverCleanupEnabled: StateFlow<Boolean> = _rolloverCleanupEnabled.asStateFlow()
+    val rolloverCleanupEnabled: StateFlow<Boolean> = preferences.rolloverCleanupEnabled
+    fun setRolloverCleanupEnabled(enabled: Boolean) = preferences.setRolloverCleanupEnabled(enabled)
 
-    fun setRolloverCleanupEnabled(enabled: Boolean) {
-        _rolloverCleanupEnabled.value = enabled
-        userPrefs?.edit()?.putBoolean(KEY_ROLLOVER_CLEANUP_ENABLED, enabled)?.apply()
-    }
-
-    private val _startViewMode = MutableStateFlow(
-        userPrefs?.getString(KEY_START_VIEW, ViewMode.DAILY.name)?.let { name ->
-            try {
-                val mode = ViewMode.valueOf(name)
-                if (mode == ViewMode.SETTINGS) ViewMode.DAILY else mode
-            } catch (_: Exception) {
-                ViewMode.DAILY
-            }
-        } ?: ViewMode.DAILY
-    )
-    val startViewMode: StateFlow<ViewMode> = _startViewMode.asStateFlow()
-
-    fun setStartViewMode(mode: ViewMode) {
-        val validMode = if (mode == ViewMode.SETTINGS) ViewMode.DAILY else mode
-        _startViewMode.value = validMode
-        userPrefs?.edit()?.putString(KEY_START_VIEW, validMode.name)?.apply()
-    }
+    val startViewMode: StateFlow<ViewMode> = preferences.startViewMode
+    fun setStartViewMode(mode: ViewMode) = preferences.setStartViewMode(mode)
 
     private fun getInitialViewMode(): ViewMode {
-        val preferred = _startViewMode.value
-        return when (preferred) {
-            ViewMode.MONTHLY -> if (_showMonthlyView.value) ViewMode.MONTHLY else ViewMode.DAILY
-            ViewMode.LIST -> if (_showListView.value) ViewMode.LIST else ViewMode.DAILY
+        return when (preferences.startViewMode.value) {
+            ViewMode.MONTHLY -> if (preferences.showMonthlyView.value) ViewMode.MONTHLY else ViewMode.DAILY
+            ViewMode.LIST -> if (preferences.showListView.value) ViewMode.LIST else ViewMode.DAILY
             else -> ViewMode.DAILY
         }
     }
 
-    private val _showDailyProgress = MutableStateFlow(
-        userPrefs?.getBoolean(KEY_SHOW_DAILY_PROGRESS, true) ?: true
-    )
-    val showDailyProgress: StateFlow<Boolean> = _showDailyProgress.asStateFlow()
+    val showDailyProgress: StateFlow<Boolean> = preferences.showDailyProgress
+    fun setShowDailyProgress(show: Boolean) = preferences.setShowDailyProgress(show)
 
     private val _currentToday = MutableStateFlow(AppDate.today())
     val currentToday: StateFlow<AppDate> = _currentToday.asStateFlow()
 
-    private val _lastRolloverInfo = MutableStateFlow<Pair<String, String>?>(
-        userPrefs?.getString(KEY_LAST_ROLLOVER_DATE, null)?.let { date ->
-            Pair(date, userPrefs.getString(KEY_LAST_ROLLOVER_TIMESTAMP, "") ?: "")
-        }
-    )
-    val lastRolloverInfo: StateFlow<Pair<String, String>?> = _lastRolloverInfo.asStateFlow()
+    val lastRolloverInfo: StateFlow<Pair<String, String>?> = preferences.lastRolloverInfo
 
-    fun setShowDailyProgress(show: Boolean) {
-        _showDailyProgress.value = show
-        userPrefs?.edit()?.putBoolean(KEY_SHOW_DAILY_PROGRESS, show)?.apply()
-    }
+    val hideCompletedInList: StateFlow<Boolean> = preferences.hideCompletedInList
+    fun setHideCompletedInList(hide: Boolean) = preferences.setHideCompletedInList(hide)
 
-    // Whether the List view drops tasks and subtasks as soon as they are completed.
-    private val _hideCompletedInList = MutableStateFlow(
-        userPrefs?.getBoolean(KEY_HIDE_COMPLETED_IN_LIST, false) ?: false
-    )
-    val hideCompletedInList: StateFlow<Boolean> = _hideCompletedInList.asStateFlow()
+    val collapsibleDaysInList: StateFlow<Boolean> = preferences.collapsibleDaysInList
+    fun setCollapsibleDaysInList(enabled: Boolean) = preferences.setCollapsibleDaysInList(enabled)
 
-    fun setHideCompletedInList(hide: Boolean) {
-        _hideCompletedInList.value = hide
-        userPrefs?.edit()?.putBoolean(KEY_HIDE_COMPLETED_IN_LIST, hide)?.apply()
-    }
+    val collapsedListDays: StateFlow<Set<AppDate>> = preferences.collapsedListDays
+    fun toggleListDayCollapsed(date: AppDate) = preferences.toggleListDayCollapsed(date)
 
-    // Whether tapping a day header in the List view collapses that day.
-    private val _collapsibleDaysInList = MutableStateFlow(
-        userPrefs?.getBoolean(KEY_COLLAPSIBLE_DAYS_IN_LIST, false) ?: false
-    )
-    val collapsibleDaysInList: StateFlow<Boolean> = _collapsibleDaysInList.asStateFlow()
+    val subtasksCollapsedByDefault: StateFlow<Boolean> = preferences.subtasksCollapsedByDefault
+    fun setSubtasksCollapsedByDefault(collapsed: Boolean) =
+        preferences.setSubtasksCollapsedByDefault(collapsed)
 
-    fun setCollapsibleDaysInList(enabled: Boolean) {
-        if (_collapsibleDaysInList.value == enabled) return
-        _collapsibleDaysInList.value = enabled
-        userPrefs?.edit()?.putBoolean(KEY_COLLAPSIBLE_DAYS_IN_LIST, enabled)?.apply()
-        // Turning the option off drops collapsed days so re-enabling starts fully expanded.
-        if (!enabled) setCollapsedListDays(emptySet())
-    }
-
-    // The List view days currently collapsed. Days before today are dropped on load so stale
-    // entries do not accumulate, and the pruned set is persisted.
-    private val _collapsedListDays = MutableStateFlow(loadCollapsedListDays())
-    val collapsedListDays: StateFlow<Set<AppDate>> = _collapsedListDays.asStateFlow()
-
-    private fun loadCollapsedListDays(): Set<AppDate> {
-        val stored = userPrefs?.getStringSet(KEY_COLLAPSED_LIST_DAYS, emptySet()).orEmpty()
-        val today = AppDate.today()
-        val upcoming = stored
-            .mapNotNull { runCatching { AppDate.parseIso(it) }.getOrNull() }
-            .filter { it >= today }
-            .toSet()
-        if (upcoming.size != stored.size) persistCollapsedListDays(upcoming)
-        return upcoming
-    }
-
-    fun toggleListDayCollapsed(date: AppDate) {
-        if (!_collapsibleDaysInList.value) return
-        val current = _collapsedListDays.value
-        setCollapsedListDays(if (date in current) current - date else current + date)
-    }
-
-    private fun setCollapsedListDays(days: Set<AppDate>) {
-        if (_collapsedListDays.value == days) return
-        _collapsedListDays.value = days
-        persistCollapsedListDays(days)
-    }
-
-    private fun persistCollapsedListDays(days: Set<AppDate>) {
-        userPrefs?.edit()
-            ?.putStringSet(KEY_COLLAPSED_LIST_DAYS, days.map { it.toIsoString() }.toSet())
-            ?.apply()
-    }
-
-    // Whether tasks show their subtasks collapsed (Daily, Monthly and List views) unless toggled.
-    private val _subtasksCollapsedByDefault = MutableStateFlow(
-        userPrefs?.getBoolean(KEY_SUBTASKS_COLLAPSED_BY_DEFAULT, false) ?: false
-    )
-    val subtasksCollapsedByDefault: StateFlow<Boolean> = _subtasksCollapsedByDefault.asStateFlow()
-
-    fun setSubtasksCollapsedByDefault(collapsed: Boolean) {
-        if (_subtasksCollapsedByDefault.value == collapsed) return
-        _subtasksCollapsedByDefault.value = collapsed
-        userPrefs?.edit()?.putBoolean(KEY_SUBTASKS_COLLAPSED_BY_DEFAULT, collapsed)?.apply()
-        // Changing the default applies to every task in every view, so earlier toggles are dropped.
-        clearAllSubtaskCollapseOverrides()
-    }
-
-    // Per view, the tasks the user toggled away from the default, keyed by task id so every
-    // occurrence of a recurring task shares the same state within that view. A task is collapsed
-    // in a view when it is in that view's set XOR subtasks are collapsed by default.
-    private val _subtaskCollapseOverrides = MutableStateFlow(
-        SUBTASK_COLLAPSE_VIEWS.associateWith { view ->
-            userPrefs?.getStringSet(subtaskCollapseOverridesKey(view), emptySet())
-                ?.mapNotNull { it.toLongOrNull() }
-                ?.toSet()
-                ?: emptySet()
-        }
-    )
     val subtaskCollapseOverrides: StateFlow<Map<ViewMode, Set<Long>>> =
-        _subtaskCollapseOverrides.asStateFlow()
-
-    init {
-        userPrefs?.takeIf { it.contains(KEY_LEGACY_COLLAPSED_SUBTASK_TASK_IDS) }
-            ?.edit()?.remove(KEY_LEGACY_COLLAPSED_SUBTASK_TASK_IDS)?.apply()
-    }
+        preferences.subtaskCollapseOverrides
 
     fun isSubtasksCollapsed(view: ViewMode, taskId: Long): Boolean =
-        (taskId in overridesFor(view)) != _subtasksCollapsedByDefault.value
+        preferences.isSubtasksCollapsed(view, taskId)
 
-    fun toggleSubtasksCollapsed(view: ViewMode, taskId: Long) {
-        val current = overridesFor(view)
-        setSubtaskCollapseOverrides(view, if (taskId in current) current - taskId else current + taskId)
-    }
+    fun toggleSubtasksCollapsed(view: ViewMode, taskId: Long) =
+        preferences.toggleSubtasksCollapsed(view, taskId)
 
-    private fun expandSubtasks(view: ViewMode, taskId: Long) {
-        if (isSubtasksCollapsed(view, taskId)) toggleSubtasksCollapsed(view, taskId)
-    }
+    private fun expandSubtasks(view: ViewMode, taskId: Long) =
+        preferences.expandSubtasks(view, taskId)
 
-    private fun clearSubtaskCollapseOverride(taskId: Long) {
-        SUBTASK_COLLAPSE_VIEWS.forEach { view ->
-            val current = overridesFor(view)
-            if (taskId in current) setSubtaskCollapseOverrides(view, current - taskId)
-        }
-    }
-
-    private fun clearAllSubtaskCollapseOverrides() {
-        SUBTASK_COLLAPSE_VIEWS.forEach { setSubtaskCollapseOverrides(it, emptySet()) }
-    }
-
-    private fun overridesFor(view: ViewMode): Set<Long> =
-        _subtaskCollapseOverrides.value[view].orEmpty()
-
-    private fun subtaskCollapseOverridesKey(view: ViewMode) =
-        KEY_SUBTASK_COLLAPSE_OVERRIDES_PREFIX + view.name
-
-    private fun setSubtaskCollapseOverrides(view: ViewMode, ids: Set<Long>) {
-        require(view in SUBTASK_COLLAPSE_VIEWS) { "$view has no collapsible subtasks" }
-        _subtaskCollapseOverrides.value = _subtaskCollapseOverrides.value + (view to ids)
-        userPrefs?.edit()
-            ?.putStringSet(subtaskCollapseOverridesKey(view), ids.map { it.toString() }.toSet())
-            ?.apply()
-    }
+    private fun clearSubtaskCollapseOverride(taskId: Long) =
+        preferences.clearSubtaskCollapseOverride(taskId)
 
     private val driveBackupMutex = Mutex()
     private val rolloverMutex = Mutex()
@@ -522,7 +321,7 @@ class TaskViewModel(
         isForegroundCheck: Boolean = false,
         onComplete: ((Int, Int, Int) -> Unit)? = null
     ) {
-        if (isForegroundCheck && !_rolloverCleanupEnabled.value) {
+        if (isForegroundCheck && !preferences.rolloverCleanupEnabled.value) {
             return
         }
         viewModelScope.launch {
@@ -530,23 +329,16 @@ class TaskViewModel(
                 val targetDateIso = targetDate.toIsoString()
                 // Foreground/startup checks are automatic: allow at most one successful run per calendar day.
                 // Keep manual runs outside this throttle so the user can always run maintenance on demand.
-                if (isForegroundCheck && lastAutomaticRolloverDate == targetDateIso) {
+                if (isForegroundCheck && preferences.lastAutomaticRolloverDate == targetDateIso) {
                     return@withLock
                 }
 
                 val result = repository.cleanupAndRolloverTasks(targetDate)
                 if (isForegroundCheck) {
-                    lastAutomaticRolloverDate = targetDateIso
-                    userPrefs?.edit()
-                        ?.putString(KEY_LAST_AUTOMATIC_ROLLOVER_DATE, targetDateIso)
-                        ?.apply()
+                    preferences.recordAutomaticRollover(targetDateIso)
                 }
                 val nowTimeFormatted = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-                userPrefs?.edit()
-                    ?.putString(KEY_LAST_ROLLOVER_DATE, targetDate.toIsoString())
-                    ?.putString(KEY_LAST_ROLLOVER_TIMESTAMP, nowTimeFormatted)
-                    ?.apply()
-                _lastRolloverInfo.value = Pair(targetDate.toIsoString(), nowTimeFormatted)
+                preferences.recordRollover(targetDate.toIsoString(), nowTimeFormatted)
 
                 val movedCount = result.movedCount
                 val cleanedCount = result.cleanedCount
@@ -840,8 +632,8 @@ class TaskViewModel(
     fun closeSettings() {
         if (_viewMode.value != ViewMode.SETTINGS) return
         _viewMode.value = when (viewModeBeforeSettings) {
-            ViewMode.MONTHLY -> if (_showMonthlyView.value) ViewMode.MONTHLY else ViewMode.DAILY
-            ViewMode.LIST -> if (_showListView.value) ViewMode.LIST else ViewMode.DAILY
+            ViewMode.MONTHLY -> if (preferences.showMonthlyView.value) ViewMode.MONTHLY else ViewMode.DAILY
+            ViewMode.LIST -> if (preferences.showListView.value) ViewMode.LIST else ViewMode.DAILY
             else -> ViewMode.DAILY
         }
     }
@@ -1228,8 +1020,7 @@ class TaskViewModel(
      * rollover throttle and run it, so restored past-dated tasks are rolled over right away.
      */
     private fun onLocalDataReplaced() {
-        lastAutomaticRolloverDate = null
-        userPrefs?.edit()?.remove(KEY_LAST_AUTOMATIC_ROLLOVER_DATE)?.apply()
+        preferences.clearAutomaticRolloverThrottle()
         runCleanupAndRollover(targetDate = AppDate.today(), isForegroundCheck = true)
     }
 
