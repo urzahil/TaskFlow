@@ -456,6 +456,7 @@ fun MainScreen(
                         onNextMonth = { viewModel.nextMonth() },
                         onToggleTask = { viewModel.toggleTaskCompletion(it) },
                         onToggleSubtask = { task, subtask -> viewModel.toggleSubtask(task, subtask) },
+                        onEditTask = { viewModel.openEditTaskDialog(it.task) },
                         onSwitchToDailyView = { viewModel.setViewMode(ViewMode.DAILY) },
                         currentToday = currentToday,
                         showMonthlyTaskList = showMonthlyTaskList,
@@ -477,7 +478,8 @@ fun MainScreen(
                         onToggleSubtasksCollapsed = { viewModel.toggleSubtasksCollapsed(ViewMode.LIST, it) },
                         collapsibleDays = collapsibleDaysInList,
                         collapsedDays = collapsedListDays,
-                        onToggleDayCollapsed = { viewModel.toggleListDayCollapsed(it) }
+                        onToggleDayCollapsed = { viewModel.toggleListDayCollapsed(it) },
+                        onEditTask = { viewModel.openEditTaskDialog(it.task) }
                     )
                 }
 

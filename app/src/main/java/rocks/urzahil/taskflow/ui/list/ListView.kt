@@ -46,6 +46,7 @@ fun ListView(
     collapsibleDays: Boolean = false,
     collapsedDays: Set<AppDate> = emptySet(),
     onToggleDayCollapsed: (AppDate) -> Unit = {},
+    onEditTask: (TaskItemUi) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val daysWithTasks = remember(days, hideCompleted) {
@@ -112,8 +113,8 @@ fun ListView(
                 ) {
                     val collapsed = collapsibleDays && dayGroup.date in collapsedDays
 
-                    // Day name header: Only day name, no date. Tappable when days are collapsible;
-                    // a chevron at the end marks a collapsed day.
+                    // Day header: "Today"/"Tomorrow" or the weekday, plus the short date. Tappable
+                    // when days are collapsible; a chevron at the end marks a collapsed day.
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -132,15 +133,27 @@ fun ListView(
                             ),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = dayGroup.dayName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
+                        Row(
+                            verticalAlignment = Alignment.Bottom,
                             modifier = Modifier
                                 .weight(1f)
                                 .padding(start = 4.dp, top = 6.dp, bottom = 4.dp)
-                        )
+                        ) {
+                            Text(
+                                text = dayGroup.dayName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = dayGroup.date.formatShort(includeYear = false),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .padding(start = 8.dp, bottom = 1.dp)
+                                    .testTag("list_day_date_$index")
+                            )
+                        }
                         if (collapsed) {
                             Icon(
                                 imageVector = Icons.Default.KeyboardArrowDown,
@@ -170,7 +183,8 @@ fun ListView(
                                     onToggleSubtask = { onToggleSubtask(taskItem, it) },
                                     isSubtasksCollapsed =
                                         (taskItem.task.id in subtaskCollapseOverrides) != subtasksCollapsedByDefault,
-                                    onToggleSubtasksCollapsed = { onToggleSubtasksCollapsed(taskItem.task.id) }
+                                    onToggleSubtasksCollapsed = { onToggleSubtasksCollapsed(taskItem.task.id) },
+                                    onEdit = { onEditTask(taskItem) }
                                 )
                             }
                         }

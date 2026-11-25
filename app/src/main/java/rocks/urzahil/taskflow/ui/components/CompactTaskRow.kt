@@ -7,7 +7,15 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -47,6 +55,7 @@ import rocks.urzahil.taskflow.ui.model.TaskItemUi
  * Test tags are "<tagPrefix>_task_item_<id>", "toggle_<tagPrefix>_task_<id>" and, when the task
  * has subtasks, "<tagPrefix>_subtask_toggle_<id>" for the collapse chevron.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CompactTaskRow(
     taskItem: TaskItemUi,
@@ -55,6 +64,8 @@ fun CompactTaskRow(
     onToggleSubtask: (SubtaskItemUi) -> Unit = {},
     isSubtasksCollapsed: Boolean = false,
     onToggleSubtasksCollapsed: () -> Unit = {},
+    /** Long-press (and TalkBack's "Edit task" action) opens the task for editing. */
+    onEdit: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -74,14 +85,23 @@ fun CompactTaskRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onToggle() }
-                .padding(horizontal = 8.dp, vertical = 2.dp),
+                .combinedClickable(
+                    onClick = onToggle,
+                    onLongClick = onEdit,
+                    onLongClickLabel = if (onEdit != null) "Edit task" else null
+                )
+                .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // 48dp is the minimum accessible touch target; the icon inside stays compact.
             IconButton(
                 onClick = onToggle,
                 modifier = Modifier
-                    .size(26.dp)
+                    .size(48.dp)
+                    .semantics {
+                        role = Role.Checkbox
+                        toggleableState = ToggleableState(taskItem.isCompleted)
+                    }
                     .testTag("toggle_${tagPrefix}_task_${taskItem.task.id}")
             ) {
                 if (taskItem.isCompleted) {
@@ -135,7 +155,7 @@ fun CompactTaskRow(
                 IconButton(
                     onClick = onToggleSubtasksCollapsed,
                     modifier = Modifier
-                        .size(26.dp)
+                        .size(48.dp)
                         .testTag("${tagPrefix}_subtask_toggle_${taskItem.task.id}")
                 ) {
                     Icon(
@@ -160,8 +180,13 @@ fun CompactTaskRow(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onToggleSubtask(subtask) }
-                            .padding(start = 40.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
+                            .heightIn(min = 48.dp)
+                            .toggleable(
+                                value = subtask.isChecked,
+                                role = Role.Checkbox,
+                                onValueChange = { onToggleSubtask(subtask) }
+                            )
+                            .padding(start = 40.dp, end = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (subtask.isChecked) {
