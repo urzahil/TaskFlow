@@ -99,6 +99,8 @@ fun SettingsScreen(
     onDisconnectDrive: () -> Unit = {},
     onBackupToDrive: () -> Unit = {},
     onRestoreFromDrive: () -> Unit = {},
+    onResolveSyncConflictKeepDrive: () -> Unit = {},
+    onResolveSyncConflictKeepThisDevice: () -> Unit = {},
     onSetAutoBackup: (Boolean) -> Unit = {},
     onExportJsonBackup: () -> Unit = {},
     onImportJsonBackup: () -> Unit = {},
@@ -1085,7 +1087,13 @@ fun SettingsScreen(
                                 )
                                 Text(
                                     text = if (driveSyncState.isSignedIn) {
-                                        if (driveSyncState.autoBackupEnabled) "Connected & sync enabled" else "Connected"
+                                        if (driveSyncState.syncConflict) {
+                                            "Connected, auto-backup paused"
+                                        } else if (driveSyncState.autoBackupEnabled) {
+                                            "Connected & sync enabled"
+                                        } else {
+                                            "Connected"
+                                        }
                                     } else {
                                         "Not connected"
                                     },
@@ -1097,14 +1105,22 @@ fun SettingsScreen(
 
                         if (driveSyncState.isSignedIn) {
                             Surface(
-                                color = MaterialTheme.colorScheme.primaryContainer,
+                                color = if (driveSyncState.syncConflict) {
+                                    MaterialTheme.colorScheme.errorContainer
+                                } else {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                },
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Text(
-                                    text = "ACTIVE",
+                                    text = if (driveSyncState.syncConflict) "PAUSED" else "ACTIVE",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    color = if (driveSyncState.syncConflict) {
+                                        MaterialTheme.colorScheme.onErrorContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    },
                                     modifier = Modifier.padding(
                                         horizontal = 8.dp,
                                         vertical = 4.dp
@@ -1115,6 +1131,52 @@ fun SettingsScreen(
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
+
+                    if (driveSyncState.isSignedIn && driveSyncState.syncConflict) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("drive_conflict_banner")
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "Backup found in Google Drive",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "This device and your Drive account both have data, so automatic backup is paused. Choose which to keep.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = onResolveSyncConflictKeepDrive,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("conflict_use_drive_button"),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) { Text("Use Drive backup") }
+                                    OutlinedButton(
+                                        onClick = onResolveSyncConflictKeepThisDevice,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("conflict_keep_device_button"),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) { Text("Keep this device") }
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
 
                     if (!driveSyncState.isSignedIn) {
                         Text(
