@@ -454,12 +454,14 @@ class TaskViewModel(
             if (restored != null && (restored.taskCount > 0 || restored.categoryCount > 0)) {
                 _maintenanceMessage.value =
                     "Restored ${restored.taskCount} tasks & ${restored.categoryCount} categories from Google Drive backup 🎉"
-            } else {
+            } else if (restoredResult.isSuccess) {
                 val currentTasks = repository.allTasks.first()
                 if (currentTasks.isEmpty()) {
                     repository.seedInitialTasksIfEmpty()
                 }
             }
+            // On failure (e.g. Drive unreachable) nothing is seeded: starter tasks would count as
+            // local data and the Drive backup lookup would never be retried.
             refreshDriveState()
 
             // Resume any backup that was durably marked pending before the process was killed or the last attempt failed.

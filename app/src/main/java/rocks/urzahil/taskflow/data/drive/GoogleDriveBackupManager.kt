@@ -50,9 +50,9 @@ sealed interface DriveConnectStep {
 open class GoogleDriveBackupManager(
     private val context: Context,
     private val repository: TaskRepository,
-    private val authorization: DriveAuthorization = PlayServicesDriveAuthorization(context)
+    private val authorization: DriveAuthorization = PlayServicesDriveAuthorization(context),
+    private val driveService: GoogleDriveService = GoogleDriveService(authorization)
 ) {
-    private val driveService = GoogleDriveService(authorization)
     private val prefs: SharedPreferences =
         context.getSharedPreferences("taskflow_drive_backup", Context.MODE_PRIVATE)
 
@@ -196,7 +196,11 @@ open class GoogleDriveBackupManager(
     /** Flags a conflict when both this device and Drive hold data. Returns true if flagged. */
     open suspend fun detectSyncConflict(): Boolean = withContext(Dispatchers.IO) {
         val email = getConnectedAccountEmail() ?: return@withContext false
-        val conflict = repository.getTaskCount() > 0 && driveService.findBackupFile(email) != null
+        if (repository.getTaskCount() == 0) return@withContext false
+        val lookup = driveService.findBackupFile(email).forgetConnectionIfAccessLost()
+        // A failed lookup is unknown, not "no backup": pause auto-backup until a lookup succeeds,
+        // so a transient error can never lead to overwriting an existing Drive backup.
+        val conflict = lookup.isFailure || lookup.getOrNull() != null
         if (conflict) setSyncConflictPending(true)
         conflict
     }
@@ -674,7 +678,12 @@ open class GoogleDriveBackupManager(
             val email = getConnectedAccountEmail() ?: return@withContext Result.success(null)
             Log.i(TAG, "Fresh install with Drive connected, checking for a backup...")
 
-            val backupInfo = driveService.findBackupFile(email) ?: run {
+            val lookup = driveService.findBackupFile(email).forgetConnectionIfAccessLost()
+            // Only a successful lookup may settle the check; a failure is retried next launch.
+            if (lookup.isFailure) {
+                return@withContext Result.failure(lookup.exceptionOrNull() ?: Exception("Drive lookup failed"))
+            }
+            val backupInfo = lookup.getOrNull() ?: run {
                 prefs.edit().putBoolean(KEY_HAS_CHECKED_INSTALL_RESTORE, true).apply()
                 return@withContext Result.success(null)
             }
