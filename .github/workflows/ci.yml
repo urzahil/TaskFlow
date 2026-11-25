@@ -43,15 +43,24 @@ jobs:
       - name: Unit tests, lint and screenshot verification
         run: |
           # Maven Central rate-limits shared CI runners (HTTP 429), both for Gradle dependencies
-          # and for the Robolectric android-all jars downloaded at test time. Retry with a pause.
+          # and for the Robolectric android-all jars downloaded at test time. Retry only when the
+          # output shows such a download problem; any other failure fails immediately.
+          log="$RUNNER_TEMP/gradle-attempt.log"
           for attempt in 1 2 3; do
-            if ./gradlew testDebugUnitTest lintDebug verifyRoborazziDebug --stacktrace; then
+            set +e
+            ./gradlew testDebugUnitTest lintDebug verifyRoborazziDebug --stacktrace 2>&1 | tee "$log"
+            status=${PIPESTATUS[0]}
+            set -e
+            if [ "$status" -eq 0 ]; then
               exit 0
             fi
-            echo "::warning::Gradle attempt $attempt failed; retrying in $((attempt * 45))s (Maven Central may be rate limiting)."
-            sleep $((attempt * 45))
+            if [ "$attempt" -lt 3 ] && grep -qE 'Too Many Requests|status code 429|MavenArtifactFetcher|Could not (GET|HEAD|resolve)' "$log"; then
+              echo "::warning::Gradle attempt $attempt failed on a download error; retrying in $((attempt * 45))s."
+              sleep $((attempt * 45))
+            else
+              exit "$status"
+            fi
           done
-          exit 1
 
       - name: Upload reports
         if: failure()
