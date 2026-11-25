@@ -10,10 +10,6 @@ jobs:
   release:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    env:
-      # Maven Central rate-limits the shared runners (HTTP 429); resolve through Google's mirror
-      # first (see settings.gradle.kts). Gradle falls back to Maven Central when it lacks an artifact.
-      MAVEN_CENTRAL_MIRROR: https://maven-central.storage-download.googleapis.com/maven2
 
     steps:
       - name: Checkout
