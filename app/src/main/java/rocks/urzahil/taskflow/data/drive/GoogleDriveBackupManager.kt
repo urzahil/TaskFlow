@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.util.Log
 import rocks.urzahil.taskflow.data.model.AppDate
+import rocks.urzahil.taskflow.data.db.BackupSnapshot
 import rocks.urzahil.taskflow.data.model.CategoryEntity
 import rocks.urzahil.taskflow.data.model.SubtaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.SubtaskEntity
@@ -222,6 +223,18 @@ open class GoogleDriveBackupManager(
     /**
      * Serializes tasks, completions, and categories to JSON string
      */
+    fun exportBackupJson(snapshot: BackupSnapshot): String = with(snapshot) {
+        exportBackupJson(
+            tasks, completions, categories, exclusions, subtasks, subtaskCompletions, subtaskExclusions
+        )
+    }
+
+    open suspend fun backupSnapshot(snapshot: BackupSnapshot): Result<DriveBackupInfo> = with(snapshot) {
+        backupToDrive(
+            tasks, completions, categories, exclusions, subtasks, subtaskCompletions, subtaskExclusions
+        )
+    }
+
     fun exportBackupJson(
         tasks: List<TaskEntity>,
         completions: List<TaskCompletionEntity>,

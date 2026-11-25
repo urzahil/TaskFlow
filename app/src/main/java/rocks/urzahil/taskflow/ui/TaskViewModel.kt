@@ -1038,17 +1038,8 @@ class TaskViewModel(
                     break
                 }
                 try {
-                    val tasks = repository.allTasks.first()
-                    val completions = repository.allCompletions.first()
-                    val categories = repository.allCategories.first()
-                    val exclusions = repository.allOccurrenceExclusions.first()
-                    val subtasks = repository.allSubtasks.first()
-                    val subtaskCompletions = repository.allSubtaskCompletions.first()
-                    val subtaskExclusions = repository.allSubtaskExclusions.first()
-                    val result = driveBackupManager.backupToDrive(
-                        tasks, completions, categories, exclusions, subtasks, subtaskCompletions,
-                        subtaskExclusions
-                    )
+                    val snapshot = repository.getBackupSnapshot()
+                    val result = driveBackupManager.backupSnapshot(snapshot)
                     if (result.isSuccess) {
                         driveBackupManager.setBackupPendingDurable(false)
                         refreshDriveState()
@@ -1088,20 +1079,11 @@ class TaskViewModel(
             _driveSyncState.value = _driveSyncState.value.copy(isSyncing = true, syncMessage = null)
             try {
                 driveBackupMutex.withLock {
-                    val tasks = repository.allTasks.first()
-                    val completions = repository.allCompletions.first()
-                    val categories = repository.allCategories.first()
-                    val exclusions = repository.allOccurrenceExclusions.first()
-                    val subtasks = repository.allSubtasks.first()
-                    val subtaskCompletions = repository.allSubtaskCompletions.first()
-                    val subtaskExclusions = repository.allSubtaskExclusions.first()
-                    val result = driveBackupManager.backupToDrive(
-                        tasks, completions, categories, exclusions, subtasks, subtaskCompletions,
-                        subtaskExclusions
-                    )
+                    val snapshot = repository.getBackupSnapshot()
+                    val result = driveBackupManager.backupSnapshot(snapshot)
                     if (result.isSuccess) {
                         refreshDriveState(
-                            message = "Backed up ${tasks.size} tasks & ${categories.size} categories to Google Drive! ☁️",
+                            message = "Backed up ${snapshot.tasks.size} tasks & ${snapshot.categories.size} categories to Google Drive! ☁️",
                             isError = false
                         )
                     } else {
@@ -1243,17 +1225,7 @@ class TaskViewModel(
     }
 
     suspend fun getBackupJsonString(): String {
-        val tasks = repository.allTasks.first()
-        val completions = repository.allCompletions.first()
-        val categories = repository.allCategories.first()
-        val exclusions = repository.allOccurrenceExclusions.first()
-        val subtasks = repository.allSubtasks.first()
-        val subtaskCompletions = repository.allSubtaskCompletions.first()
-        val subtaskExclusions = repository.allSubtaskExclusions.first()
-        return driveBackupManager.exportBackupJson(
-            tasks, completions, categories, exclusions, subtasks, subtaskCompletions,
-            subtaskExclusions
-        )
+        return driveBackupManager.exportBackupJson(repository.getBackupSnapshot())
     }
 
     fun restoreFromJson(jsonString: String) {

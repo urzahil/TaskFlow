@@ -16,8 +16,46 @@ import rocks.urzahil.taskflow.data.model.TaskEntity
 import rocks.urzahil.taskflow.data.model.TaskOccurrenceExclusionEntity
 import kotlinx.coroutines.flow.Flow
 
+/** All backed-up tables, read in one transaction so they are mutually consistent. */
+data class BackupSnapshot(
+    val tasks: List<TaskEntity>,
+    val completions: List<TaskCompletionEntity>,
+    val categories: List<CategoryEntity>,
+    val exclusions: List<TaskOccurrenceExclusionEntity>,
+    val subtasks: List<SubtaskEntity>,
+    val subtaskCompletions: List<SubtaskCompletionEntity>,
+    val subtaskExclusions: List<SubtaskExclusionEntity>,
+)
+
 @Dao
 interface TaskDao {
+
+    @Query("SELECT * FROM tasks ORDER BY createdAt DESC")
+    suspend fun getAllTasksList(): List<TaskEntity>
+
+    @Query("SELECT * FROM categories ORDER BY isDefault DESC, name ASC")
+    suspend fun getAllCategoriesList(): List<CategoryEntity>
+
+    @Query("SELECT * FROM subtasks ORDER BY position, id")
+    suspend fun getAllSubtasksList(): List<SubtaskEntity>
+
+    @Query("SELECT * FROM subtask_completions")
+    suspend fun getAllSubtaskCompletionsList(): List<SubtaskCompletionEntity>
+
+    @Query("SELECT * FROM subtask_exclusions")
+    suspend fun getAllSubtaskExclusionsList(): List<SubtaskExclusionEntity>
+
+    /** One consistent view of every table: a concurrent edit can't leave dangling task ids. */
+    @Transaction
+    suspend fun getBackupSnapshot(): BackupSnapshot = BackupSnapshot(
+        tasks = getAllTasksList(),
+        completions = getAllCompletionsList(),
+        categories = getAllCategoriesList(),
+        exclusions = getAllOccurrenceExclusionsList(),
+        subtasks = getAllSubtasksList(),
+        subtaskCompletions = getAllSubtaskCompletionsList(),
+        subtaskExclusions = getAllSubtaskExclusionsList(),
+    )
 
     @Query("SELECT * FROM tasks ORDER BY createdAt DESC")
     fun getAllTasks(): Flow<List<TaskEntity>>
