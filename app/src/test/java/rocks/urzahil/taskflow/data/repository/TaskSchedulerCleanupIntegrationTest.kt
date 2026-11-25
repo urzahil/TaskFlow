@@ -208,7 +208,7 @@ class TaskSchedulerCleanupIntegrationTest {
     }
 
     @Test
-    fun recurringTaskSubtaskChecksStayOnTheirOwnDates() = runBlocking {
+    fun recurringTaskSubtaskChecksAreNotMovedToToday() = runBlocking {
         val today = AppDate(2026, 10, 13)
         val taskId = dao.insertTask(task("Daily", "2026-10-10", isRecurring = true))
         val subtaskId = dao.insertSubtask(SubtaskEntity(taskId = taskId, title = "Step"))
@@ -216,8 +216,40 @@ class TaskSchedulerCleanupIntegrationTest {
 
         TaskScheduler.cleanupAndRolloverTasks(dao, today)
 
-        assertEquals(1, dao.countSubtaskCompletion(subtaskId, "2026-10-12"))
+        // Checks are per date and are never carried onto today for a recurring task.
         assertEquals(0, dao.countSubtaskCompletion(subtaskId, today.toIsoString()))
+    }
+
+    @Test
+    fun pastSubtaskRowsOfRecurringTasksArePruned() = runBlocking {
+        val today = AppDate(2026, 10, 13)
+        val todayIso = today.toIsoString()
+        val taskId = dao.insertTask(task("Daily", "2026-10-10", isRecurring = true))
+        val sharedId = dao.insertSubtask(SubtaskEntity(taskId = taskId, title = "Shared"))
+        val pastDatedId =
+            dao.insertSubtask(SubtaskEntity(taskId = taskId, date = "2026-10-11", title = "Past only"))
+        val todayDatedId =
+            dao.insertSubtask(SubtaskEntity(taskId = taskId, date = todayIso, title = "Today only"))
+        dao.insertSubtaskCompletion(SubtaskCompletionEntity(sharedId, "2026-10-11"))
+        dao.insertSubtaskCompletion(SubtaskCompletionEntity(sharedId, todayIso))
+        dao.insertSubtaskCompletion(SubtaskCompletionEntity(pastDatedId, "2026-10-11"))
+        dao.insertSubtaskExclusion(SubtaskExclusionEntity(sharedId, "2026-10-11"))
+        dao.insertSubtaskExclusion(SubtaskExclusionEntity(sharedId, "2026-10-20"))
+
+        TaskScheduler.cleanupAndRolloverTasks(dao, today)
+
+        assertEquals(
+            listOf(sharedId to todayIso),
+            dao.getAllSubtaskCompletions().first().map { it.subtaskId to it.date }
+        )
+        assertEquals(
+            listOf(SubtaskExclusionEntity(sharedId, "2026-10-20")),
+            dao.getAllSubtaskExclusions().first()
+        )
+        assertEquals(
+            setOf(sharedId, todayDatedId),
+            dao.getAllSubtasks().first().map { it.id }.toSet()
+        )
     }
 
     private fun task(
