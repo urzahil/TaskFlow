@@ -730,7 +730,11 @@ class TaskViewModel(
             val items = snap.tasksOn(date)
             DayTasksGroupUi(
                 date = date,
-                dayName = AppDate.dayOfWeekName(date.dayOfWeek()),
+                dayName = when (offset) {
+                    0L -> "Today"
+                    1L -> "Tomorrow"
+                    else -> AppDate.dayOfWeekName(date.dayOfWeek())
+                },
                 tasks = if (query.isBlank()) items else items.filter { it.matches(query) }
             )
         }
