@@ -50,11 +50,15 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.setValue
+import org.json.JSONArray
+import org.json.JSONObject
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,6 +84,50 @@ private data class CategoryOption(
     val name: String,
     val icon: ImageVector,
     val color: Long
+)
+
+private val AppDateSaver = Saver<AppDate, String>(
+    save = { it.toIsoString() },
+    restore = { AppDate.parseIso(it) }
+)
+
+private val IntSetSaver = Saver<Set<Int>, ArrayList<Int>>(
+    save = { ArrayList(it) },
+    restore = { it.toSet() }
+)
+
+private val SubtaskListSaver = Saver<SnapshotStateList<SubtaskEntity>, String>(
+    save = { list ->
+        JSONArray().apply {
+            list.forEach {
+                put(
+                    JSONObject()
+                        .put("id", it.id)
+                        .put("taskId", it.taskId)
+                        .put("date", it.date ?: JSONObject.NULL)
+                        .put("title", it.title)
+                        .put("position", it.position)
+                )
+            }
+        }.toString()
+    },
+    restore = { json ->
+        val array = JSONArray(json)
+        mutableStateListOf<SubtaskEntity>().apply {
+            for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                add(
+                    SubtaskEntity(
+                        id = o.getLong("id"),
+                        taskId = o.getLong("taskId"),
+                        date = if (o.isNull("date")) null else o.getString("date"),
+                        title = o.getString("title"),
+                        position = o.getInt("position")
+                    )
+                )
+            }
+        }
+    }
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -126,27 +174,37 @@ fun TaskAddEditSheet(
         }
     }
 
-    var title by remember { mutableStateOf(existingTask?.title ?: "") }
-    var description by remember { mutableStateOf(existingTask?.description ?: "") }
-    var selectedCategory by remember {
+    // Survives rotation and process death; keyed on the task so another task starts fresh.
+    val formKey = existingTask?.id
+    var title by rememberSaveable(formKey) { mutableStateOf(existingTask?.title ?: "") }
+    var description by rememberSaveable(formKey) { mutableStateOf(existingTask?.description ?: "") }
+    var selectedCategory by rememberSaveable(formKey) {
         mutableStateOf(
             existingTask?.category
                 ?: availableCategories.firstOrNull { it.isDefault }?.name
                 ?: "General"
         )
     }
-    var selectedColor by remember {
+    var selectedColor by rememberSaveable(formKey) {
         mutableStateOf(
             existingTask?.colorHex
                 ?: categoryOptions.firstOrNull { it.name == selectedCategory }?.color ?: 0xFF3B82F6
         )
     }
-    var priority by remember { mutableStateOf(existingTask?.priority ?: "Medium") }
+    var priority by rememberSaveable(formKey) { mutableStateOf(existingTask?.priority ?: "Medium") }
 
-    val subtasks = remember(existingSubtasks) {
-        mutableStateListOf<SubtaskEntity>().apply { addAll(existingSubtasks) }
+    // The saved subtasks arrive asynchronously (the ViewModel flow starts empty) and re-emit on any
+    // database change. Seed the editable list once, and never again once the user has touched it,
+    // so background emissions can't wipe in-progress typing.
+    val subtasks = rememberSaveable(formKey, saver = SubtaskListSaver) { mutableStateListOf<SubtaskEntity>() }
+    var subtasksSeeded by rememberSaveable(formKey) { mutableStateOf(false) }
+    LaunchedEffect(existingSubtasks) {
+        if (!subtasksSeeded && existingSubtasks.isNotEmpty()) {
+            subtasks.addAll(existingSubtasks)
+            subtasksSeeded = true
+        }
     }
-    var sharedSubtasks by remember { mutableStateOf(existingTask?.sharedSubtasks ?: true) }
+    var sharedSubtasks by rememberSaveable(formKey) { mutableStateOf(existingTask?.sharedSubtasks ?: true) }
     // Focus the newest subtask field right after "Add Subtask" is tapped.
     val newSubtaskFocusRequester = remember { FocusRequester() }
     var focusNewSubtask by remember { mutableStateOf(false) }
@@ -161,13 +219,13 @@ fun TaskAddEditSheet(
         }
     }
 
-    var isRecurring by remember { mutableStateOf(existingTask?.isRecurring ?: false) }
-    var recurrenceDays by remember { mutableIntStateOf(existingTask?.recurrenceDays ?: 1) }
-    var isMonthlyMode by remember { mutableStateOf(existingTask?.isMonthlyRecurrence() == true) }
-    var isDaysOfWeekMode by remember {
+    var isRecurring by rememberSaveable(formKey) { mutableStateOf(existingTask?.isRecurring ?: false) }
+    var recurrenceDays by rememberSaveable(formKey) { mutableStateOf(existingTask?.recurrenceDays ?: 1) }
+    var isMonthlyMode by rememberSaveable(formKey) { mutableStateOf(existingTask?.isMonthlyRecurrence() == true) }
+    var isDaysOfWeekMode by rememberSaveable(formKey) {
         mutableStateOf(!isMonthlyMode && !existingTask?.recurrenceDaysOfWeek.isNullOrBlank())
     }
-    var selectedDaysOfWeek by remember {
+    var selectedDaysOfWeek by rememberSaveable(formKey, stateSaver = IntSetSaver) {
         val savedDays = existingTask?.parsedDaysOfWeek().orEmpty()
         mutableStateOf(
             if (savedDays.isNotEmpty()) {
@@ -185,7 +243,7 @@ fun TaskAddEditSheet(
             }
         )
     }
-    var customDaysText by remember {
+    var customDaysText by rememberSaveable(formKey) {
         mutableStateOf(
             if (existingTask != null && !isMonthlyMode && !isDaysOfWeekMode && existingTask.recurrenceDays != 1 && existingTask.recurrenceDays != 7) {
                 existingTask.recurrenceDays.toString()
@@ -193,7 +251,7 @@ fun TaskAddEditSheet(
         )
     }
 
-    var startDate by remember {
+    var startDate by rememberSaveable(formKey, stateSaver = AppDateSaver) {
         mutableStateOf(
             existingTask?.let {
                 try {
@@ -207,22 +265,22 @@ fun TaskAddEditSheet(
 
     // Monthly recurrence; the pickers default to the start date's day and weekday.
     val savedMonthWeekdays = remember { existingTask?.parsedMonthWeekdays().orEmpty() }
-    var monthInterval by remember {
-        mutableIntStateOf(
+    var monthInterval by rememberSaveable(formKey) {
+        mutableStateOf(
             (existingTask?.recurrenceMonths ?: 1).coerceIn(1, TaskEntity.MAX_RECURRENCE_MONTHS)
         )
     }
-    var isMonthlyByWeekday by remember { mutableStateOf(savedMonthWeekdays.isNotEmpty()) }
-    var selectedMonthDays by remember {
+    var isMonthlyByWeekday by rememberSaveable(formKey) { mutableStateOf(savedMonthWeekdays.isNotEmpty()) }
+    var selectedMonthDays by rememberSaveable(formKey, stateSaver = IntSetSaver) {
         mutableStateOf(existingTask?.parsedMonthDays()?.takeIf { it.isNotEmpty() } ?: setOf(startDate.day))
     }
-    var selectedMonthOrdinals by remember {
+    var selectedMonthOrdinals by rememberSaveable(formKey, stateSaver = IntSetSaver) {
         mutableStateOf(
             savedMonthWeekdays.map { it.ordinal }.toSet().takeIf { it.isNotEmpty() }
                 ?: setOf(monthWeekdayOrdinalOf(startDate))
         )
     }
-    var selectedMonthWeekdays by remember {
+    var selectedMonthWeekdays by rememberSaveable(formKey, stateSaver = IntSetSaver) {
         mutableStateOf(
             savedMonthWeekdays.map { it.dayOfWeek }.toSet().takeIf { it.isNotEmpty() }
                 ?: setOf(startDate.dayOfWeek())
@@ -230,10 +288,10 @@ fun TaskAddEditSheet(
     }
 
     // Until the user picks monthly days themselves, opening Monthly follows the current start date.
-    var monthlyFollowsStartDate by remember { mutableStateOf(existingTask?.isMonthlyRecurrence() != true) }
+    var monthlyFollowsStartDate by rememberSaveable(formKey) { mutableStateOf(existingTask?.isMonthlyRecurrence() != true) }
 
-    var hasEndDate by remember { mutableStateOf(existingTask?.endDate != null) }
-    var endDate by remember {
+    var hasEndDate by rememberSaveable(formKey) { mutableStateOf(existingTask?.endDate != null) }
+    var endDate by rememberSaveable(formKey, stateSaver = AppDateSaver) {
         mutableStateOf(
             existingTask?.endDate?.let {
                 try {
@@ -245,8 +303,8 @@ fun TaskAddEditSheet(
         )
     }
 
-    var showStartDatePicker by remember { mutableStateOf(false) }
-    var showEndDatePicker by remember { mutableStateOf(false) }
+    var showStartDatePicker by rememberSaveable(formKey) { mutableStateOf(false) }
+    var showEndDatePicker by rememberSaveable(formKey) { mutableStateOf(false) }
 
     // Backups reject tasks that end before they start, so never let one be saved.
     val endsBeforeStart = isRecurring && hasEndDate && endDate < startDate
@@ -328,7 +386,10 @@ fun TaskAddEditSheet(
                     ) {
                         OutlinedTextField(
                             value = subtask.title,
-                            onValueChange = { subtasks[index] = subtask.copy(title = it) },
+                            onValueChange = {
+                                subtasksSeeded = true
+                                subtasks[index] = subtask.copy(title = it)
+                            },
                             placeholder = { Text("Subtask") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
@@ -343,7 +404,10 @@ fun TaskAddEditSheet(
                                 ),
                             shape = RoundedCornerShape(12.dp)
                         )
-                        IconButton(onClick = { subtasks.removeAt(index) }) {
+                        IconButton(onClick = {
+                            subtasksSeeded = true
+                            subtasks.removeAt(index)
+                        }) {
                             Icon(Icons.Default.Close, contentDescription = "Remove subtask")
                         }
                     }
@@ -352,6 +416,7 @@ fun TaskAddEditSheet(
                 TextButton(
                     onClick = {
                         focusNewSubtask = true
+                        subtasksSeeded = true
                         subtasks.add(SubtaskEntity(taskId = existingTask?.id ?: 0, title = ""))
                     }
                 ) {
