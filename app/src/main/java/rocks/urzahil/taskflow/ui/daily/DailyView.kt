@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -609,13 +608,14 @@ fun TaskCardItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 0.dp, end = 12.dp, top = 9.dp, bottom = 9.dp),
+                .padding(horizontal = 12.dp, vertical = 9.dp),
             verticalAlignment = Alignment.Top
         ) {
-            // Custom checkbox: a 48dp touch target around the 24dp circle, exposed as a Checkbox.
+            // Custom checkbox, exposed as a Checkbox.
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .padding(top = 1.dp)
+                    .size(24.dp)
                     .clip(CircleShape)
                     .toggleable(
                         value = taskItem.isCompleted,
@@ -652,7 +652,7 @@ fun TaskCardItem(
                 }
             }
 
-            Spacer(modifier = Modifier.width(2.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
             // Task Content
             Column(
@@ -697,14 +697,13 @@ fun TaskCardItem(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = 48.dp),
+                                    .padding(top = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 // Checkbox and title toggle together; the remove button stays separate.
                                 Row(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .heightIn(min = 48.dp)
                                         .toggleable(
                                             value = subtask.isChecked,
                                             role = Role.Checkbox,
@@ -752,7 +751,7 @@ fun TaskCardItem(
                                 }
                                 IconButton(
                                     onClick = { onRemoveSubtask(subtask) },
-                                    modifier = Modifier.size(48.dp)
+                                    modifier = Modifier.size(24.dp)
                                 ) {
                                     Icon(
                                         Icons.Default.Close,
@@ -893,7 +892,7 @@ fun TaskCardItem(
                         IconButton(
                             onClick = toggleSubtasksCollapsed,
                             modifier = Modifier
-                                .size(48.dp)
+                                .size(24.dp)
                                 .testTag("subtask_toggle_${task.id}")
                         ) {
                             Icon(
@@ -913,7 +912,7 @@ fun TaskCardItem(
             Box {
                 IconButton(
                     onClick = { menuExpanded = true },
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
                         Icons.Default.MoreVert,
