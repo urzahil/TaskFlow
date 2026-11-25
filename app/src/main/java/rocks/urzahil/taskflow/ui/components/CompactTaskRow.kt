@@ -9,7 +9,6 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
@@ -90,14 +89,13 @@ fun CompactTaskRow(
                     onLongClick = onEdit,
                     onLongClickLabel = if (onEdit != null) "Edit task" else null
                 )
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 48dp is the minimum accessible touch target; the icon inside stays compact.
             IconButton(
                 onClick = onToggle,
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(26.dp)
                     .semantics {
                         role = Role.Checkbox
                         toggleableState = ToggleableState(taskItem.isCompleted)
@@ -155,7 +153,7 @@ fun CompactTaskRow(
                 IconButton(
                     onClick = onToggleSubtasksCollapsed,
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(26.dp)
                         .testTag("${tagPrefix}_subtask_toggle_${taskItem.task.id}")
                 ) {
                     Icon(
@@ -180,13 +178,12 @@ fun CompactTaskRow(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 48.dp)
                             .toggleable(
                                 value = subtask.isChecked,
                                 role = Role.Checkbox,
                                 onValueChange = { onToggleSubtask(subtask) }
                             )
-                            .padding(start = 40.dp, end = 8.dp),
+                            .padding(start = 40.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (subtask.isChecked) {
