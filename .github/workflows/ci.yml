@@ -32,8 +32,26 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      # Robolectric downloads android-all jars into ~/.m2 at test time; keep them between runs
+      # so a throttled Maven Central does not fail every test class.
+      - name: Cache Robolectric jars
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
+
       - name: Unit tests, lint and screenshot verification
-        run: ./gradlew testDebugUnitTest lintDebug verifyRoborazziDebug --stacktrace
+        run: |
+          # Maven Central rate-limits shared CI runners (HTTP 429), both for Gradle dependencies
+          # and for the Robolectric android-all jars downloaded at test time. Retry with a pause.
+          for attempt in 1 2 3; do
+            if ./gradlew testDebugUnitTest lintDebug verifyRoborazziDebug --stacktrace; then
+              exit 0
+            fi
+            echo "::warning::Gradle attempt $attempt failed; retrying in $((attempt * 45))s (Maven Central may be rate limiting)."
+            sleep $((attempt * 45))
+          done
+          exit 1
 
       - name: Upload reports
         if: failure()

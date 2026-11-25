@@ -93,7 +93,17 @@ jobs:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew clean testDebugUnitTest assembleRelease bundleRelease --no-daemon
+        run: |
+          # Maven Central rate-limits shared CI runners (HTTP 429), both for Gradle dependencies
+          # and for the Robolectric android-all jars downloaded at test time. Retry with a pause.
+          for attempt in 1 2 3; do
+            if ./gradlew clean testDebugUnitTest assembleRelease bundleRelease --no-daemon; then
+              exit 0
+            fi
+            echo "::warning::Gradle attempt $attempt failed; retrying in $((attempt * 45))s (Maven Central may be rate limiting)."
+            sleep $((attempt * 45))
+          done
+          exit 1
 
       - name: Prepare release APK and AAB
         run: |
