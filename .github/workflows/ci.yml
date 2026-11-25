@@ -32,8 +32,35 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      # Robolectric downloads android-all jars into ~/.m2 at test time; keep them between runs
+      # so a throttled Maven Central does not fail every test class.
+      - name: Cache Robolectric jars
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
+
       - name: Unit tests, lint and screenshot verification
-        run: ./gradlew testDebugUnitTest lintDebug verifyRoborazziDebug --stacktrace
+        run: |
+          # Maven Central rate-limits shared CI runners (HTTP 429), both for Gradle dependencies
+          # and for the Robolectric android-all jars downloaded at test time. Retry only when the
+          # output shows such a download problem; any other failure fails immediately.
+          log="$RUNNER_TEMP/gradle-attempt.log"
+          for attempt in 1 2 3; do
+            set +e
+            ./gradlew testDebugUnitTest lintDebug verifyRoborazziDebug --stacktrace 2>&1 | tee "$log"
+            status=${PIPESTATUS[0]}
+            set -e
+            if [ "$status" -eq 0 ]; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ] && grep -qE 'Too Many Requests|status code 429|MavenArtifactFetcher|Could not (GET|HEAD|resolve)' "$log"; then
+              echo "::warning::Gradle attempt $attempt failed on a download error; retrying in $((attempt * 45))s."
+              sleep $((attempt * 45))
+            else
+              exit "$status"
+            fi
+          done
 
       - name: Upload reports
         if: failure()
