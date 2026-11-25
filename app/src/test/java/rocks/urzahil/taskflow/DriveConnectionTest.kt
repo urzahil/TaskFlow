@@ -12,6 +12,10 @@ import rocks.urzahil.taskflow.data.drive.DriveAuthorization
 import rocks.urzahil.taskflow.data.drive.DriveAuthorizationOutcome
 import rocks.urzahil.taskflow.data.drive.DriveConnectStep
 import rocks.urzahil.taskflow.data.drive.GoogleDriveBackupManager
+import rocks.urzahil.taskflow.data.drive.GoogleDriveService
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import rocks.urzahil.taskflow.data.repository.TaskRepository
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -217,5 +221,111 @@ class DriveConnectionTest {
 
         assertTrue(result.isFailure)
         assertTrue(authorization.authorizeCalls.isEmpty())
+    }
+
+    // --- Drive lookup failures and upload format (MockWebServer) ---
+
+    private fun serverManager(server: MockWebServer): GoogleDriveBackupManager {
+        val base = server.url("/").toString().trimEnd('/')
+        val service = GoogleDriveService(authorization, "$base/files", "$base/upload")
+        return GoogleDriveBackupManager(context, repository, authorization, service)
+    }
+
+    private fun addLocalTask() = runBlocking { repository.seedInitialTasksIfEmpty() }
+
+    @Test
+    fun failedLookupIsAFailureNotNoBackup() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setResponseCode(503))
+            val service = GoogleDriveService(
+                authorization,
+                server.url("/files").toString(),
+                server.url("/upload").toString()
+            )
+
+            assertTrue(service.findBackupFile("me@example.com").isFailure)
+        }
+    }
+
+    @Test
+    fun emptyLookupIsSuccessWithNull() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"files":[]}"""))
+            val service = GoogleDriveService(
+                authorization,
+                server.url("/files").toString(),
+                server.url("/upload").toString()
+            )
+
+            val result = service.findBackupFile("me@example.com")
+
+            assertTrue(result.isSuccess)
+            assertNull(result.getOrNull())
+        }
+    }
+
+    @Test
+    fun transientLookupFailureStillFlagsAConflict() = runBlocking {
+        addLocalTask()
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST))
+            val manager = serverManager(server)
+            manager.connect()
+
+            assertTrue(manager.detectSyncConflict())
+            assertTrue(manager.isSyncConflictPending())
+        }
+    }
+
+    @Test
+    fun noBackupOnDriveMeansNoConflict() = runBlocking {
+        addLocalTask()
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"files":[]}"""))
+            val manager = serverManager(server)
+            manager.connect()
+
+            assertFalse(manager.detectSyncConflict())
+            assertFalse(manager.isSyncConflictPending())
+        }
+    }
+
+    @Test
+    fun failedInstallLookupIsRetriedNextLaunch() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setResponseCode(503))
+            server.enqueue(MockResponse().setBody("""{"files":[]}"""))
+            val manager = serverManager(server)
+            manager.connect()
+
+            assertTrue(manager.checkAndAutoRestoreOnInstall().isFailure)
+            // The failure must not mark the install check as done: the next call asks Drive again.
+            assertTrue(manager.checkAndAutoRestoreOnInstall().isSuccess)
+            assertEquals(2, server.requestCount)
+        }
+    }
+
+    @Test
+    fun firstUploadIsMultipartRelated() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"files":[]}"""))
+            server.enqueue(MockResponse().setBody("""{"id":"abc","modifiedTime":"t"}"""))
+            val service = GoogleDriveService(
+                authorization,
+                server.url("/files").toString(),
+                server.url("/upload").toString()
+            )
+
+            val result = service.uploadBackup("me@example.com", """{"tasks":[]}""")
+
+            assertTrue(result.isSuccess)
+            server.takeRequest() // lookup
+            val upload = server.takeRequest()
+            assertTrue(upload.getHeader("Content-Type")!!.startsWith("multipart/related"))
+            val body = upload.body.readUtf8()
+            assertFalse(body.contains("Content-Disposition"))
+            assertTrue(body.contains("\"name\":\"taskflow_backup.json\""))
+            assertTrue(body.contains("""{"tasks":[]}"""))
+        }
     }
 }

@@ -1,6 +1,7 @@
 package rocks.urzahil.taskflow.data.repository
 
 import android.database.sqlite.SQLiteConstraintException
+import rocks.urzahil.taskflow.data.db.BackupSnapshot
 import rocks.urzahil.taskflow.data.db.TaskDao
 import rocks.urzahil.taskflow.data.model.AppDate
 import rocks.urzahil.taskflow.data.model.CategoryEntity
@@ -24,6 +25,8 @@ class TaskRepository(private val taskDao: TaskDao) {
         taskDao.getAllSubtaskCompletions()
     val allSubtaskExclusions: Flow<List<SubtaskExclusionEntity>> =
         taskDao.getAllSubtaskExclusions()
+
+    suspend fun getBackupSnapshot(): BackupSnapshot = taskDao.getBackupSnapshot()
 
     suspend fun insertTask(task: TaskEntity): Long = taskDao.insertTask(task)
 

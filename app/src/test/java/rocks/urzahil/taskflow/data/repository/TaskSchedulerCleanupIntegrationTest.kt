@@ -9,6 +9,7 @@ import rocks.urzahil.taskflow.data.model.SubtaskEntity
 import rocks.urzahil.taskflow.data.model.SubtaskExclusionEntity
 import rocks.urzahil.taskflow.data.model.TaskCompletionEntity
 import rocks.urzahil.taskflow.data.model.TaskEntity
+import rocks.urzahil.taskflow.data.model.TaskOccurrenceExclusionEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -111,7 +112,7 @@ class TaskSchedulerCleanupIntegrationTest {
     }
 
     @Test
-    fun recurringWeeklyTaskStillAdvancesToItsNextSelectedWeekday() = runBlocking {
+    fun recurringWeeklyTaskStartMovesToTodayNotToItsNextWeekday() = runBlocking {
         val today = AppDate(2026, 10, 13) // Tuesday
         val weeklyId = dao.insertTask(
             task(
@@ -124,11 +125,41 @@ class TaskSchedulerCleanupIntegrationTest {
 
         TaskScheduler.cleanupAndRolloverTasks(dao, today)
 
-        assertEquals("2026-10-19", dao.getTaskById(weeklyId)?.startDate)
+        // Weekday schedules don't depend on their start, so it only moves to today.
+        assertEquals("2026-10-13", dao.getTaskById(weeklyId)?.startDate)
     }
 
     @Test
-    fun monthlyTaskAdvancesToItsNextDay_clampedToMonthEnd() = runBlocking {
+    fun addingAWeekdayAfterRolloverShowsUpTomorrow() = runBlocking {
+        val today = AppDate(2026, 10, 13) // Tuesday
+        val id = dao.insertTask(
+            task("Mondays", "2026-10-05", isRecurring = true, recurrenceDaysOfWeek = "1")
+        )
+
+        TaskScheduler.cleanupAndRolloverTasks(dao, today)
+        // The user edits it on Tuesday to also repeat on Wednesdays.
+        val edited = dao.getTaskById(id)!!.copy(recurrenceDaysOfWeek = "1,3")
+
+        assertTrue(TaskScheduler.isTaskScheduledOnDate(edited, today.plusDays(1)))
+    }
+
+    @Test
+    fun veryOldStartDateIsCountedWithoutPerDayWork() = runBlocking {
+        val today = AppDate(2026, 10, 13)
+        val start = AppDate(1970, 1, 1)
+        val id = dao.insertTask(task("Old daily", start.toIsoString(), isRecurring = true))
+        dao.insertOccurrenceExclusion(TaskOccurrenceExclusionEntity(id, "2026-10-01"))
+        // Outside the past range: must not be subtracted.
+        dao.insertOccurrenceExclusion(TaskOccurrenceExclusionEntity(id, "2026-10-20"))
+
+        val result = TaskScheduler.cleanupAndRolloverTasks(dao, today)
+
+        val pastDays = today.minusDays(1).daysBetween(start) + 1
+        assertEquals((pastDays - 1).toInt(), result.cleanedRecurringOccurrences)
+    }
+
+    @Test
+    fun monthlyTaskStartMovesToToday_andCountsItsPastOccurrence() = runBlocking {
         val today = AppDate(2026, 11, 5)
         val taskId = dao.insertTask(
             TaskEntity(
@@ -143,7 +174,7 @@ class TaskSchedulerCleanupIntegrationTest {
 
         // 31 October was the only past occurrence; November has no 31st.
         assertEquals(1, result.cleanedRecurringOccurrences)
-        assertEquals("2026-11-30", dao.getTaskById(taskId)?.startDate)
+        assertEquals("2026-11-05", dao.getTaskById(taskId)?.startDate)
     }
 
     @Test
@@ -208,7 +239,7 @@ class TaskSchedulerCleanupIntegrationTest {
     }
 
     @Test
-    fun recurringTaskSubtaskChecksStayOnTheirOwnDates() = runBlocking {
+    fun recurringTaskSubtaskChecksAreNotMovedToToday() = runBlocking {
         val today = AppDate(2026, 10, 13)
         val taskId = dao.insertTask(task("Daily", "2026-10-10", isRecurring = true))
         val subtaskId = dao.insertSubtask(SubtaskEntity(taskId = taskId, title = "Step"))
@@ -216,8 +247,40 @@ class TaskSchedulerCleanupIntegrationTest {
 
         TaskScheduler.cleanupAndRolloverTasks(dao, today)
 
-        assertEquals(1, dao.countSubtaskCompletion(subtaskId, "2026-10-12"))
+        // Checks are per date and are never carried onto today for a recurring task.
         assertEquals(0, dao.countSubtaskCompletion(subtaskId, today.toIsoString()))
+    }
+
+    @Test
+    fun pastSubtaskRowsOfRecurringTasksArePruned() = runBlocking {
+        val today = AppDate(2026, 10, 13)
+        val todayIso = today.toIsoString()
+        val taskId = dao.insertTask(task("Daily", "2026-10-10", isRecurring = true))
+        val sharedId = dao.insertSubtask(SubtaskEntity(taskId = taskId, title = "Shared"))
+        val pastDatedId =
+            dao.insertSubtask(SubtaskEntity(taskId = taskId, date = "2026-10-11", title = "Past only"))
+        val todayDatedId =
+            dao.insertSubtask(SubtaskEntity(taskId = taskId, date = todayIso, title = "Today only"))
+        dao.insertSubtaskCompletion(SubtaskCompletionEntity(sharedId, "2026-10-11"))
+        dao.insertSubtaskCompletion(SubtaskCompletionEntity(sharedId, todayIso))
+        dao.insertSubtaskCompletion(SubtaskCompletionEntity(pastDatedId, "2026-10-11"))
+        dao.insertSubtaskExclusion(SubtaskExclusionEntity(sharedId, "2026-10-11"))
+        dao.insertSubtaskExclusion(SubtaskExclusionEntity(sharedId, "2026-10-20"))
+
+        TaskScheduler.cleanupAndRolloverTasks(dao, today)
+
+        assertEquals(
+            listOf(sharedId to todayIso),
+            dao.getAllSubtaskCompletions().first().map { it.subtaskId to it.date }
+        )
+        assertEquals(
+            listOf(SubtaskExclusionEntity(sharedId, "2026-10-20")),
+            dao.getAllSubtaskExclusions().first()
+        )
+        assertEquals(
+            setOf(sharedId, todayDatedId),
+            dao.getAllSubtasks().first().map { it.id }.toSet()
+        )
     }
 
     private fun task(

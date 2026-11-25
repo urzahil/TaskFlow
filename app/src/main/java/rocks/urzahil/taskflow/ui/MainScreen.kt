@@ -20,14 +20,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
+import rocks.urzahil.taskflow.ui.icons.FormatListBulleted
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CalendarMonth
+import rocks.urzahil.taskflow.ui.icons.CalendarMonth
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Today
-import androidx.compose.material.icons.filled.ViewAgenda
+import rocks.urzahil.taskflow.ui.icons.Today
+import rocks.urzahil.taskflow.ui.icons.ViewAgenda
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -456,6 +456,7 @@ fun MainScreen(
                         onNextMonth = { viewModel.nextMonth() },
                         onToggleTask = { viewModel.toggleTaskCompletion(it) },
                         onToggleSubtask = { task, subtask -> viewModel.toggleSubtask(task, subtask) },
+                        onEditTask = { viewModel.openEditTaskDialog(it.task) },
                         onSwitchToDailyView = { viewModel.setViewMode(ViewMode.DAILY) },
                         currentToday = currentToday,
                         showMonthlyTaskList = showMonthlyTaskList,
@@ -477,7 +478,8 @@ fun MainScreen(
                         onToggleSubtasksCollapsed = { viewModel.toggleSubtasksCollapsed(ViewMode.LIST, it) },
                         collapsibleDays = collapsibleDaysInList,
                         collapsedDays = collapsedListDays,
-                        onToggleDayCollapsed = { viewModel.toggleListDayCollapsed(it) }
+                        onToggleDayCollapsed = { viewModel.toggleListDayCollapsed(it) },
+                        onEditTask = { viewModel.openEditTaskDialog(it.task) }
                     )
                 }
 
@@ -516,6 +518,8 @@ fun MainScreen(
                         onRestoreFromDrive = {
                             viewModel.restoreFromDrive()
                         },
+                        onResolveSyncConflictKeepDrive = { viewModel.resolveSyncConflictKeepDrive() },
+                        onResolveSyncConflictKeepThisDevice = { viewModel.resolveSyncConflictUseThisDevice() },
                         onSetAutoBackup = { enabled ->
                             viewModel.setAutoBackupEnabled(enabled)
                         },

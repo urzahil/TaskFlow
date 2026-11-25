@@ -1,7 +1,7 @@
 package rocks.urzahil.taskflow
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MedicalServices
+import rocks.urzahil.taskflow.ui.icons.MedicalServices
 import rocks.urzahil.taskflow.ui.model.CategoryIcons
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

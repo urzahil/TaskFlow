@@ -128,7 +128,9 @@ class DatabaseIntegrityTest {
         FrameworkSQLiteOpenHelperFactory().create(config).writableDatabase.close()
 
         val migrated = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
-            .addMigrations(AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
+            .addMigrations(AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8,
+                AppDatabase.MIGRATION_8_9
+            )
             .allowMainThreadQueries()
             .build()
         try {
@@ -208,5 +210,19 @@ class DatabaseIntegrityTest {
 
         assertNull(TaskSchedule.from(task(3).copy(startDate = "garbage")))
         assertNotNull(TaskSchedule.from(task(4)))
+    }
+
+    @Test
+    fun backupSnapshotCoversEveryTableConsistently() = runBlocking {
+        repository.insertTask(task(1))
+        repository.insertTask(task(2))
+
+        val snapshot = repository.getBackupSnapshot()
+
+        assertEquals(setOf(1L, 2L), snapshot.tasks.map { it.id }.toSet())
+        val taskIds = snapshot.tasks.map { it.id }.toSet()
+        assertTrue(snapshot.completions.all { it.taskId in taskIds })
+        assertTrue(snapshot.exclusions.all { it.taskId in taskIds })
+        assertEquals(repository.allCategories.first(), snapshot.categories)
     }
 }

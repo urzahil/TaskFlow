@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import rocks.urzahil.taskflow.data.drive.DriveConnectStep
+import rocks.urzahil.taskflow.data.drive.DriveBackupWorker
 import rocks.urzahil.taskflow.data.drive.GoogleDriveBackupManager
 import rocks.urzahil.taskflow.data.prefs.UserPreferencesRepository
 import rocks.urzahil.taskflow.data.db.CategoryNameConflictException
@@ -28,6 +29,7 @@ import rocks.urzahil.taskflow.ui.model.DayTasksGroupUi
 import rocks.urzahil.taskflow.ui.model.SubtaskItemUi
 import rocks.urzahil.taskflow.ui.model.TaskFilter
 import rocks.urzahil.taskflow.ui.model.TaskItemUi
+import rocks.urzahil.taskflow.ui.monthly.monthGridDates
 import rocks.urzahil.taskflow.ui.model.ViewMode
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -80,6 +82,7 @@ class TaskViewModel(
 
     companion object {
         const val DEFAULT_AUTO_BACKUP_DEBOUNCE_MS = 800L
+        private const val WORKER_BACKUP_DELAY_MS = 60_000L
 
         // Views that show tasks with collapsible subtasks; each keeps its own collapse state.
         val SUBTASK_COLLAPSE_VIEWS = UserPreferencesRepository.SUBTASK_COLLAPSE_VIEWS
@@ -253,12 +256,14 @@ class TaskViewModel(
             if (restored != null && (restored.taskCount > 0 || restored.categoryCount > 0)) {
                 _maintenanceMessage.value =
                     "Restored ${restored.taskCount} tasks & ${restored.categoryCount} categories from Google Drive backup 🎉"
-            } else {
+            } else if (restoredResult.isSuccess) {
                 val currentTasks = repository.allTasks.first()
                 if (currentTasks.isEmpty()) {
                     repository.seedInitialTasksIfEmpty()
                 }
             }
+            // On failure (e.g. Drive unreachable) nothing is seeded: starter tasks would count as
+            // local data and the Drive backup lookup would never be retried.
             refreshDriveState()
 
             // Resume any backup that was durably marked pending before the process was killed or the last attempt failed.
@@ -355,6 +360,8 @@ class TaskViewModel(
                     }
                     _maintenanceMessage.value =
                         details.joinToString(", ").replaceFirstChar { it.uppercase() } + "."
+                    // Rollover rewrote or deleted tasks: back that up like any other change.
+                    triggerAutoBackup()
                 } else if (!isForegroundCheck) {
                     _maintenanceMessage.value =
                         "Tasks are up to date for today. No rollover needed."
@@ -430,9 +437,22 @@ class TaskViewModel(
         }
 
         /** Per-day summaries for [dates], leaving out days with nothing scheduled. */
-        fun summarize(dates: List<AppDate>): Map<String, DaySummaryUi> {
+        fun summarize(dates: List<AppDate>, query: String = ""): Map<String, DaySummaryUi> {
             val summaryMap = mutableMapOf<String, DaySummaryUi>()
             for (date in dates) {
+                if (query.isNotBlank()) {
+                    // Only the tasks matching the search count towards the day's indicator.
+                    val matching = tasksOn(date).filter { it.matches(query) }
+                    if (matching.isNotEmpty()) {
+                        summaryMap[date.toIsoString()] = DaySummaryUi(
+                            date = date,
+                            totalTasks = matching.size,
+                            completedTasks = matching.count { it.isCompleted },
+                            taskColors = matching.take(3).map { it.task.colorHex }
+                        )
+                    }
+                    continue
+                }
                 val dateIso = date.toIsoString()
                 val scheduledSchedules = scheduledOn(date, dateIso)
                 if (scheduledSchedules.isEmpty()) continue
@@ -467,11 +487,6 @@ class TaskViewModel(
         )
     }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(5000), replay = 1)
 
-    private fun TaskItemUi.matches(query: String): Boolean =
-        task.title.contains(query, ignoreCase = true) ||
-                task.description.contains(query, ignoreCase = true) ||
-                task.category.contains(query, ignoreCase = true)
-
     /**
      * Tasks for the currently selected date.
      */
@@ -498,11 +513,23 @@ class TaskViewModel(
      * In the selected day overview of the monthly view, always show all scheduled tasks
      * for the selected date regardless of the completion filter (All, pending, done) on the daily page.
      */
-    val monthlySelectedDayTasks: StateFlow<List<TaskItemUi>> = combine(
+    private val selectedDayTasksUnfiltered: StateFlow<List<TaskItemUi>> = combine(
         snapshot,
         _selectedDate
     ) { snap, date ->
         snap.tasksOn(date)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    /** The monthly view's selected-day list; narrowed by the search query like the other views. */
+    val monthlySelectedDayTasks: StateFlow<List<TaskItemUi>> = combine(
+        selectedDayTasksUnfiltered,
+        _searchQuery
+    ) { items, query ->
+        if (query.isBlank()) items else items.filter { it.matches(query) }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -522,7 +549,11 @@ class TaskViewModel(
             val items = snap.tasksOn(date)
             DayTasksGroupUi(
                 date = date,
-                dayName = AppDate.dayOfWeekName(date.dayOfWeek()),
+                dayName = when (offset) {
+                    0L -> "Today"
+                    1L -> "Tomorrow"
+                    else -> AppDate.dayOfWeekName(date.dayOfWeek())
+                },
                 tasks = if (query.isBlank()) items else items.filter { it.matches(query) }
             )
         }
@@ -536,7 +567,7 @@ class TaskViewModel(
      * Statistics for the currently selected date (total, completed). Derived from the unfiltered
      * day list, so individually deleted recurring occurrences do not count.
      */
-    val dailyStats: StateFlow<DailyStats> = monthlySelectedDayTasks
+    val dailyStats: StateFlow<DailyStats> = selectedDayTasksUnfiltered
         .map { items -> DailyStats(total = items.size, completed = items.count { it.isCompleted }) }
         .stateIn(
             scope = viewModelScope,
@@ -545,13 +576,15 @@ class TaskViewModel(
         )
 
     /**
-     * Map of Date ISO string to DaySummaryUi for all days in the currently selected month.
+     * Map of Date ISO string to DaySummaryUi for every day shown in the selected month's grid.
      */
     val monthDaysSummary: StateFlow<Map<String, DaySummaryUi>> = combine(
         snapshot,
-        _selectedYearMonth
-    ) { snap, (year, month) ->
-        snap.summarize((1..AppDate.daysInMonth(year, month)).map { AppDate(year, month, it) })
+        _selectedYearMonth,
+        _searchQuery
+    ) { snap, (year, month), query ->
+        // The whole grid, so the leading/trailing days of adjacent months show their tasks too.
+        snap.summarize(monthGridDates(year, month), query)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -799,6 +832,13 @@ class TaskViewModel(
 
         isAutoBackupPending = true
         driveBackupManager.setBackupPendingDurable(true)
+        // Safety net if the app is closed before the in-process upload runs: WorkManager uploads
+        // once online. When the in-process upload succeeds first, the pending flag is clear and
+        // the worker does nothing.
+        context?.let {
+            // Best effort: a scheduling problem must never break editing.
+            runCatching { DriveBackupWorker.schedule(it.applicationContext, WORKER_BACKUP_DELAY_MS) }
+        }
         debounceJob?.cancel()
         debounceJob = viewModelScope.launch {
             if (debounceMs > 0) {
@@ -828,17 +868,8 @@ class TaskViewModel(
                     break
                 }
                 try {
-                    val tasks = repository.allTasks.first()
-                    val completions = repository.allCompletions.first()
-                    val categories = repository.allCategories.first()
-                    val exclusions = repository.allOccurrenceExclusions.first()
-                    val subtasks = repository.allSubtasks.first()
-                    val subtaskCompletions = repository.allSubtaskCompletions.first()
-                    val subtaskExclusions = repository.allSubtaskExclusions.first()
-                    val result = driveBackupManager.backupToDrive(
-                        tasks, completions, categories, exclusions, subtasks, subtaskCompletions,
-                        subtaskExclusions
-                    )
+                    val snapshot = repository.getBackupSnapshot()
+                    val result = driveBackupManager.backupSnapshot(snapshot)
                     if (result.isSuccess) {
                         driveBackupManager.setBackupPendingDurable(false)
                         refreshDriveState()
@@ -878,20 +909,11 @@ class TaskViewModel(
             _driveSyncState.value = _driveSyncState.value.copy(isSyncing = true, syncMessage = null)
             try {
                 driveBackupMutex.withLock {
-                    val tasks = repository.allTasks.first()
-                    val completions = repository.allCompletions.first()
-                    val categories = repository.allCategories.first()
-                    val exclusions = repository.allOccurrenceExclusions.first()
-                    val subtasks = repository.allSubtasks.first()
-                    val subtaskCompletions = repository.allSubtaskCompletions.first()
-                    val subtaskExclusions = repository.allSubtaskExclusions.first()
-                    val result = driveBackupManager.backupToDrive(
-                        tasks, completions, categories, exclusions, subtasks, subtaskCompletions,
-                        subtaskExclusions
-                    )
+                    val snapshot = repository.getBackupSnapshot()
+                    val result = driveBackupManager.backupSnapshot(snapshot)
                     if (result.isSuccess) {
                         refreshDriveState(
-                            message = "Backed up ${tasks.size} tasks & ${categories.size} categories to Google Drive! ☁️",
+                            message = "Backed up ${snapshot.tasks.size} tasks & ${snapshot.categories.size} categories to Google Drive! ☁️",
                             isError = false
                         )
                     } else {
@@ -1032,17 +1054,7 @@ class TaskViewModel(
     }
 
     suspend fun getBackupJsonString(): String {
-        val tasks = repository.allTasks.first()
-        val completions = repository.allCompletions.first()
-        val categories = repository.allCategories.first()
-        val exclusions = repository.allOccurrenceExclusions.first()
-        val subtasks = repository.allSubtasks.first()
-        val subtaskCompletions = repository.allSubtaskCompletions.first()
-        val subtaskExclusions = repository.allSubtaskExclusions.first()
-        return driveBackupManager.exportBackupJson(
-            tasks, completions, categories, exclusions, subtasks, subtaskCompletions,
-            subtaskExclusions
-        )
+        return driveBackupManager.exportBackupJson(repository.getBackupSnapshot())
     }
 
     fun restoreFromJson(jsonString: String) {

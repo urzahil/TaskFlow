@@ -28,7 +28,11 @@ class DriveAccessLostException :
  * Talks to the Drive REST API inside the app-data folder. Every call is made for an explicit
  * account and gets its access token from [authorization].
  */
-class GoogleDriveService(private val authorization: DriveAuthorization) {
+class GoogleDriveService(
+    private val authorization: DriveAuthorization,
+    private val filesUrl: String = FILES_URL,
+    private val uploadUrl: String = UPLOAD_URL,
+) {
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -39,8 +43,8 @@ class GoogleDriveService(private val authorization: DriveAuthorization) {
     companion object {
         private const val TAG = "GoogleDriveService"
         const val BACKUP_FILENAME = "taskflow_backup.json"
-        private const val FILES_URL = "https://www.googleapis.com/drive/v3/files"
-        private const val UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files"
+        const val FILES_URL = "https://www.googleapis.com/drive/v3/files"
+        const val UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files"
         private val JSON = "application/json; charset=utf-8".toMediaType()
     }
 
@@ -102,15 +106,18 @@ class GoogleDriveService(private val authorization: DriveAuthorization) {
         }
     }
 
-    /** Finds the backup's metadata, or null when there is none or Drive could not be reached. */
-    suspend fun findBackupFile(accountEmail: String): DriveBackupInfo? = withContext(Dispatchers.IO) {
+    /**
+     * Finds the backup's metadata. Success with null means Drive was reached and holds no backup;
+     * any failure (offline, timeout, lost access) is a failure, never "no backup yet".
+     */
+    suspend fun findBackupFile(accountEmail: String): Result<DriveBackupInfo?> = withContext(Dispatchers.IO) {
         try {
-            Session(accountEmail).lookUpBackupFile()
+            Result.success(Session(accountEmail).lookUpBackupFile())
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "Error finding backup file: ${e.message}", e)
-            null
+            Result.failure(e)
         }
     }
 
@@ -118,7 +125,7 @@ class GoogleDriveService(private val authorization: DriveAuthorization) {
     private suspend fun Session.lookUpBackupFile(): DriveBackupInfo? = execute(
         build = {
             url(
-                "$FILES_URL?spaces=appDataFolder" +
+                "$filesUrl?spaces=appDataFolder" +
                     "&q=name='$BACKUP_FILENAME' and trashed=false" +
                     "&orderBy=modifiedTime desc" +
                     "&fields=files(id,modifiedTime)"
@@ -141,7 +148,7 @@ class GoogleDriveService(private val authorization: DriveAuthorization) {
                 val info = if (existingFile != null) {
                     session.execute(
                         build = {
-                            url("$UPLOAD_URL/${existingFile.fileId}?uploadType=media")
+                            url("$uploadUrl/${existingFile.fileId}?uploadType=media")
                             patch(tasksJson.toRequestBody(JSON))
                         }
                     ) { response ->
@@ -157,14 +164,15 @@ class GoogleDriveService(private val authorization: DriveAuthorization) {
                         put("name", BACKUP_FILENAME)
                         put("parents", JSONArray().put("appDataFolder"))
                     }.toString()
+                    // Drive's uploadType=multipart is multipart/related: raw metadata part, then media part.
                     val multipartBody = MultipartBody.Builder()
-                        .setType(MultipartBody.FORM)
-                        .addFormDataPart("metadata", null, metadataJson.toRequestBody(JSON))
-                        .addFormDataPart("file", BACKUP_FILENAME, tasksJson.toRequestBody(JSON))
+                        .setType("multipart/related".toMediaType())
+                        .addPart(metadataJson.toRequestBody(JSON))
+                        .addPart(tasksJson.toRequestBody(JSON))
                         .build()
                     session.execute(
                         build = {
-                            url("$UPLOAD_URL?uploadType=multipart")
+                            url("$uploadUrl?uploadType=multipart")
                             post(multipartBody)
                         }
                     ) { response ->
@@ -192,7 +200,7 @@ class GoogleDriveService(private val authorization: DriveAuthorization) {
             val existingFile = session.lookUpBackupFile()
                 ?: return@withContext Result.failure(Exception("No backup file found in Google Drive"))
             val content = session.execute(
-                build = { url("$FILES_URL/${existingFile.fileId}?alt=media") }
+                build = { url("$filesUrl/${existingFile.fileId}?alt=media") }
             ) { response ->
                 if (!response.isSuccessful) throw IOException("Failed downloading backup: ${response.code}")
                 // Bounded read: a corrupt or hostile Drive file must not exhaust memory.
